@@ -1,0 +1,35 @@
+# Habilidad de faena: un procedimiento aprendido. Formato en docs/HABILIDADES.md.
+# Los {huecos} de los pasos se rellenan con los parámetros que el modelo saca del objetivo.
+nombre = "crear-nota"
+descripcion = "Crea una nota con título «{title}» y texto «{text}»"
+cuando = ["crear", "nota", "crea", "titulo", "texto"]
+superficie = "web"
+inicio = "http://127.0.0.1:8770/index.html"
+origen = "tarea de ejemplo sobre examples/notas"
+aprendida = "2026-10-28 18:27"
+
+[parametros]  # nombre = valor de ejemplo
+title = "Comprar pan"
+text = "dos barras de la panadería"
+
+[[pasos]]
+tipo = "clic"
+selector = "internal:role=button[name=\"New note\"i]"
+desc = "Pulsa el botón «New note»"
+
+[[pasos]]
+tipo = "escribir"
+selector = "internal:role=textbox[name=\"Title\"i]"
+valor = "{title}"
+desc = "Escribe «{title}» en el campo «Title»"
+
+[[pasos]]
+tipo = "escribir"
+selector = "internal:role=textbox[name=\"Text\"i]"
+valor = "{text}"
+desc = "Escribe «{text}» en el campo «Text»"
+
+[[pasos]]
+tipo = "clic"
+selector = "internal:role=button[name=\"Save\"i]"
+desc = "Pulsa el botón «Save»"

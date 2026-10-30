@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>Faena</RootNamespace>
+    <AssemblyName>faena</AssemblyName>
+    <AssemblyTitle>Faena</AssemblyTitle>
+    <ApplicationIcon>ui\faena.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <!-- Native libraries stay loose beside the exe, so Playwright finds its node.exe. -->
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="ui\index.html" LogicalName="ui/index.html" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Faena.Escena\Faena.Escena.csproj" />
+    <ProjectReference Include="..\Faena.Agente\Faena.Agente.csproj" />
+    <ProjectReference Include="..\Faena.Escritorio\Faena.Escritorio.csproj" />
+  </ItemGroup>
+</Project>

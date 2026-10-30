@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notes</title>
+<style>
+  :root { --bg:#f6f4ef; --fg:#22202a; --dim:#6d6873; --card:#ffffff; --line:#e2ddd3; --accent:#7a2e3f; --ok:#2f7d5a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 17px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--fg); }
+  header { display:flex; align-items:center; gap:16px; padding:18px 32px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:22px; letter-spacing:.02em; }
+  header input { flex:1; max-width:420px; padding:10px 14px; border:1px solid var(--line); border-radius:8px; font-size:16px; }
+  header button { padding:10px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-size:16px; cursor:pointer; }
+  main { display:grid; grid-template-columns: 220px 1fr; gap:24px; padding:24px 32px; }
+  aside { display:flex; flex-direction:column; gap:6px; }
+  aside a { padding:8px 12px; border-radius:8px; color:var(--fg); text-decoration:none; }
+  aside a.active { background:#eae4d8; font-weight:600; }
+  #list { display:grid; gap:12px; align-content:start; }
+  .note { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; display:flex; align-items:start; gap:14px; }
+  .note.done .title { text-decoration: line-through; color:var(--dim); }
+  .note .body { flex:1; }
+  .note .title { font-weight:600; }
+  .note .text { color:var(--dim); font-size:15px; margin-top:2px; }
+  .note .tag { font-size:13px; padding:2px 8px; border-radius:99px; background:#eae4d8; color:var(--accent); }
+  .note button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; cursor:pointer; }
+  #empty { color:var(--dim); padding:40px; text-align:center; }
+  dialog { border:0; border-radius:14px; padding:24px 28px; width:460px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  dialog label { display:block; font-size:14px; color:var(--dim); margin:12px 0 4px; }
+  dialog input, dialog select { width:100%; padding:9px 12px; border:1px solid var(--line); border-radius:8px; font-size:16px; }
+  dialog .row { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+  dialog .row button { padding:9px 16px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  dialog .row button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  #toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ok); color:#fff; padding:10px 18px; border-radius:99px; opacity:0; transition:opacity .3s; }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Notes</h1>
+  <input id="search" placeholder="Search notes…" aria-label="Search notes">
+  <button id="new">New note</button>
+</header>
+<main>
+  <aside id="nav">
+    <a href="#" data-view="all" class="active">All notes</a>
+    <a href="#" data-view="work">Work</a>
+    <a href="#" data-view="home">Home</a>
+    <a href="#" data-view="done">Done</a>
+  </aside>
+  <section id="list"></section>
+</main>
+<dialog id="editor">
+  <h2 style="margin:0">New note</h2>
+  <label for="title">Title</label><input id="title">
+  <label for="text">Text</label><input id="text">
+  <label for="tag">Tag</label>
+  <select id="tag"><option value="work">Work</option><option value="home">Home</option></select>
+  <div class="row"><button id="cancel">Cancel</button><button id="save" class="primary">Save</button></div>
+</dialog>
+<div id="toast"></div>
+<script>
+  const notes = [
+    { id: 1, title: "Quarterly report", text: "Draft the numbers before Thursday", tag: "work", done: false },
+    { id: 2, title: "Buy lightbulbs", text: "Two warm white, one for the hallway", tag: "home", done: false },
+    { id: 3, title: "Call the plumber", text: "The kitchen tap still drips", tag: "home", done: true },
+    { id: 4, title: "Review pull request", text: "The one about the login page", tag: "work", done: false },
+  ];
+  let view = "all", query = "";
+  const $ = (s) => document.querySelector(s);
+  function render() {
+    const rows = notes.filter(n =>
+      (view === "all" || (view === "done" ? n.done : n.tag === view && !n.done)) &&
+      (n.title + " " + n.text).toLowerCase().includes(query.toLowerCase()));
+    $("#list").innerHTML = rows.length ? rows.map(n => `
+      <article class="note ${n.done ? "done" : ""}" data-id="${n.id}">
+        <div class="body"><div class="title">${n.title}</div><div class="text">${n.text}</div></div>
+        <span class="tag">${n.tag}</span>
+        <button data-toggle="${n.id}">${n.done ? "Undo" : "Done"}</button>
+      </article>`).join("") : `<div id="empty">Nothing here yet.</div>`;
+  }
+  function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1800); }
+  $("#search").addEventListener("input", e => { query = e.target.value; render(); });
+  $("#nav").addEventListener("click", e => {
+    const a = e.target.closest("a"); if (!a) return; e.preventDefault();
+    view = a.dataset.view; document.querySelectorAll("#nav a").forEach(x => x.classList.toggle("active", x === a)); render();
+  });
+  $("#list").addEventListener("click", e => {
+    const b = e.target.closest("button[data-toggle]"); if (!b) return;
+    const n = notes.find(x => x.id == b.dataset.toggle); n.done = !n.done; render(); toast(n.done ? "Marked as done" : "Back to the list");
+  });
+  $("#new").addEventListener("click", () => { $("#title").value = ""; $("#text").value = ""; $("#editor").showModal(); });
+  $("#cancel").addEventListener("click", () => $("#editor").close());
+  $("#save").addEventListener("click", () => {
+    notes.unshift({ id: Date.now(), title: $("#title").value || "Untitled", text: $("#text").value, tag: $("#tag").value, done: false });
+    $("#editor").close(); render(); toast("Note saved");
+  });
+  render();
+</script>
+</body>
+</html>
