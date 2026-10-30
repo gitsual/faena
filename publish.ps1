@@ -85,6 +85,12 @@ Las tareas y las habilidades se guardan en %USERPROFILE%\Faena.
 "@
 Set-Content -Path (Join-Path $dist 'LEEME.txt') -Value $leeme -Encoding UTF8
 
+# The window embeds its fonts (SIL OFL 1.1); their licences travel with the kit.
+$licencias = Join-Path $dist 'licencias'
+New-Item -ItemType Directory -Force $licencias | Out-Null
+Copy-Item (Join-Path $raiz 'src\Faena\ui\fonts\OFL-*.txt') $licencias
+Copy-Item (Join-Path $raiz 'LICENSE') (Join-Path $licencias 'LICENSE-faena.txt')
+
 if (-not $SinZip) {
     $zip = Join-Path $distRoot "faena-$version-windows.zip"
     if (Test-Path $zip) {

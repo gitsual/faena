@@ -1,4 +1,10 @@
+<img src="docs/img/faena-icono.png" width="64" height="64" alt="">
+
 # faena
+
+*«Hago sus recados en el callejón, sin entrar en su casa, y lo apunto todo en la libreta.»*
+
+![La ventana de faena: se para antes de enviar y pide firma](docs/img/ventana-firma.png)
 
 Le encargas una tarea en una web o en un programa de Windows y la IA la hace sola, en segundo plano:
 abre la aplicación sin quitarte la pantalla, va haciendo clics y rellenando, y te deja un informe. Antes
@@ -12,9 +18,19 @@ faena hacer "Escríbele a Marta que llego tarde y mándaselo" --url https://corr
 faena hacer "Añade una nota «Pan»" --app C:\Programas\Notas.exe                              :: en un escritorio oculto
 ```
 
-…o abre `faena.exe` y encárgaselo desde la ventana: qué tiene que hacer, dónde y qué puede hacer sin
-preguntarte. Ves la función en directo (la hoja de cues con cada paso y, si hace falta, «¿Lo hago?») y al
-final el informe, con fotos de cada paso.
+…o abre `faena.exe` y dale un recado desde la ventana: qué tiene que hacer, dónde y qué puede hacer sin
+pedirte firma. Lo ves faenando en directo (lo que va apuntando, renglón a renglón, y, si hace falta,
+«Aquí me paro, señor» con *firmo, adelante* / *quieto ahí*) y al final la libreta, con las fotos de cada
+paso pegadas. Lo que aprende queda colgado en **oficios**.
+
+![La libreta de un recado hecho, con las fotos pegadas](docs/img/ventana-libreta.png)
+
+La ventana viste **Hollín**: un mozo pobre de Dickens que barre y hace recados. Sale de las fotos de la
+estética Petrurbe (adoquín mojado, callejón de ladrillo, cuaderno de estraza, cuero remendado, una llave
+oxidada, un farol): papel de estraza con renglones y el borde roto para todo lo que se lee, remiendos de
+cuero para los oficios, palotes para contar los pasos, el farol solo para lo que está pasando y el óxido
+solo para el botón que manda trabajar. Letra IM Fell English, Courier Prime y Caveat (SIL OFL, incrustadas:
+la ventana va sin red; licencias en `src/Faena/ui/fonts/`).
 
 faena salió de [tramoya](https://github.com/gitsual/tramoya), que hace vídeos de procesos: tramoya
 **enseña** cómo se hace algo; faena lo **hace**. Un proceso grabado en tramoya se le puede enseñar a faena

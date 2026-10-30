@@ -85,22 +85,23 @@ comprobación, 13 s; el mensaje, 4 turnos y 10 s hasta pararse ante «Enviar».
 
 ## En la ventana
 
-`faena` sin argumentos (o con doble clic) abre la ventana, en clave de teatro, con lo mismo sin consola:
+`faena` sin argumentos (o con doble clic) abre la ventana, vestida de Hollín (un mozo pobre que hace
+recados y lo apunta todo en su libreta), con lo mismo sin consola:
 
-- **Encargar a la IA** (botón del lateral, o el de la portada): qué tiene que hacer,
-  dónde (las webs de otros encargos, otra web o un programa), lo que puede hacer sin preguntar (chips
-  Enviar / Borrar / Pagar / Aceptar), «Ver cómo lo hace», fotos de cada paso, límites y «si sale
-  bien, añadirlo al repertorio como…».
-- **La función** (Acto II): el marcador de pasos, el último paso y la **hoja de cues** (el
-  `registro.log` en vivo). Ante algo irreversible no permitido sale **«¿Lo hago?»** con *Sí,
-  hazlo* / *No, para aquí*: la pregunta viaja de verdad al agente, que espera (30 min como mucho;
-  sin respuesta, no lo hace).
-- **El informe** (Acto III): hecho / falta tu permiso (con «Repetirlo dejándole hacerlo») / sin
-  terminar, el guion de lo que hizo, las capturas, «Añadirlo al repertorio», «Encargarlo otra vez».
-- **Encargos** en el lateral, con su estado; **Repertorio**: las habilidades como carteles
-  (parámetros, pasos, «Encargarla» con los datos de esta vez y «Sin IA: repetirla tal cual»,
-  quitar) y **Enseñarle un proceso grabado en tramoya**: su carpeta o su nombre, y sus pasos pasan al
-  repertorio.
+- **Dar un recado** (lateral o portada): qué hay que hacer, dónde (las webs de otros recados, otra web
+  o un programa), lo que puede hacer sin pedir firma (enviar / borrar / pagar / aceptar), «Mirar cómo
+  lo hago», una foto de cada paso, el jornal (pasos y minutos como mucho) y «si sale bien, lo aprendo
+  de oficio como…».
+- **Faenando**: los palotes de los pasos, el último paso y **lo que va apuntando** (el `registro.log`
+  en vivo, en papel de estraza). Ante algo irreversible no permitido sale **«Aquí me paro, señor»**
+  con *firmo, adelante* / *quieto ahí*: la pregunta viaja de verdad al agente, que espera (30 min
+  como mucho; sin respuesta, no lo hace).
+- **La libreta**: hecho / faltó su firma (con «repetirlo con su firma») / a medias, lo que hizo
+  renglón a renglón, las fotos pegadas con cinta, «que lo aprenda» y «repetirlo».
+- **Recados** en el lateral, con su estado; **Oficios**: las habilidades como remiendos de cuero
+  colgados (parámetros, pasos, «hacerlo» con los datos de esta vez, «sin pensar» = sin modelo,
+  «descoserlo») y **Enseñarme uno nuevo** desde un proyecto de tramoya: su carpeta o su nombre, y sus
+  pasos pasan a los oficios.
 
 Por debajo, cada encargo es un `faena hacer … --carpeta <tareas\id> --fondo
 --preguntar-en-carpeta`: la ventana lee lo que deja en la carpeta (`encargo.json`, `registro.log`,

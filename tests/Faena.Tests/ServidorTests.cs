@@ -54,8 +54,8 @@ public sealed class ServidorTests : IDisposable
     {
         Assert.StartsWith("http://127.0.0.1:", _servidor.Url);
         var html = await _http.GetStringAsync(_servidor.Url);
-        Assert.Contains("<title>Faena</title>", html);
-        Assert.Contains("Encargar a la IA", html);
+        Assert.Contains("<title>faena</title>", html);
+        Assert.Contains("dar un recado", html);
         Assert.DoesNotContain("Nuevo vídeo", html);
         var inicio = await Get("/api/inicio");
         Assert.Equal(Path.Combine(_raiz, "tareas"), inicio!["tareas"]!.ToString());
