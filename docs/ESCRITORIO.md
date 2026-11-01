@@ -1,132 +1,138 @@
-# Aplicaciones de escritorio (`Faena.Escritorio`)
+*[Leer en español](ESCRITORIO.es.md)*
 
-El agente de faena maneja también aplicaciones de escritorio de Windows, no solo webs. Para eso hay
-una segunda superficie, `EscritorioSuperficie`, junto a la web (`WebSuperficie`). Las dos implementan
-`ISuperficie` (`src/Faena.Agente/Superficie.cs`), así que el bucle del agente, el guardián de lo
-irreversible, las habilidades y los informes son los mismos.
+# Desktop applications (`Faena.Escritorio`)
 
-## Cómo se usa (API)
+The faena agent also drives Windows desktop applications, not just websites. For that there is a second
+surface, `EscritorioSuperficie`, next to the web one (`WebSuperficie`). Both implement `ISuperficie`
+(`src/Faena.Agente/Superficie.cs`), so the agent loop, the guard against irreversible actions, skills and
+reports are the same.
+
+From the command line: `faena do "<goal>" --app <program.exe> [--args "..."] [--window-title <title>]`
+(see [AGENTE-LOCAL.md](AGENTE-LOCAL.md)).
+
+## How to use it (API)
 
 ```csharp
 await using var sup = await EscritorioSuperficie.AbrirAsync(
-    app: @"C:\ruta\MiApp.exe",   // o un nombre del PATH: «charmap»
+    app: @"C:\path\MyApp.exe",   // or a name on the PATH: "charmap"
     argumentos: null,
-    oculto: true,                // en un escritorio Win32 propio que nadie ve (por defecto)
-    titulo: "Notas",             // parte del título de la ventana principal; null = la primera que salga
+    oculto: true,                // on a Win32 desktop of its own that nobody sees (the default)
+    titulo: "Notes",             // part of the main window's title; null = the first one that appears
     ct);
-var r = await Encargo.RunAsync(sup, new AgentOptions("Añade una nota «Pan»") { Modo = Modo.Tarea },
+var r = await Encargo.RunAsync(sup, new AgentOptions("Add a note 'Bread'") { Modo = Modo.Tarea },
                                habilidades, null, backend, log, ct);
-// Al salir del using: se cierra la app (WindowPattern.Close; si a los 3 s sigue, Kill del árbol) y el escritorio.
+// When the using block ends: the app is closed (WindowPattern.Close; if it is still there after 3 s, the process tree is killed) and so is the desktop.
 ```
 
-`sup.Tipo == "escritorio"`, `sup.Oculto`, `sup.NombreEscritorio`, `sup.Pid`. Errores de apertura:
-`FileNotFoundException` (no existe), `InvalidOperationException` (app de la Tienda en modo oculto, o no se
-pudo crear el escritorio), `TimeoutException` (no abre ventana en 20 s).
+`sup.Tipo == "escritorio"`, `sup.Oculto`, `sup.NombreEscritorio`, `sup.Pid`. Errors when opening:
+`FileNotFoundException` (it does not exist), `InvalidOperationException` (a Store app in hidden mode, or the
+desktop could not be created), `TimeoutException` (no window opens within 20 s).
 
-## Por qué un escritorio oculto
+## Why a hidden desktop
 
-El agente trabaja en segundo plano: no puede mover el ratón, teclear de verdad ni traer ventanas al frente
-(se las robaría a la persona, y GlazeWM las recolocaría). Por eso:
+The agent works in the background: it cannot move the mouse, really type or bring windows to the front
+(it would steal them from the person, and GlazeWM would rearrange them). So:
 
-1. `CreateDesktop` crea un escritorio Win32 nuevo en la estación `WinSta0`, que nunca se activa.
-2. La app se lanza con `CreateProcess` y `STARTUPINFO.lpDesktop = "WinSta0\\faena-…"`: sus ventanas
-   nacen allí y no aparecen en el escritorio de la persona ni en el gestor de ventanas.
-3. Cada llamada de UI Automation va en un hilo nuevo MTA que lo primero que hace es `SetThreadDesktop`:
-   UIA solo ve las ventanas del escritorio de su hilo. Tiene que ser un hilo sin ventanas, así que no
-   vale uno STA de COM, porque esos ya tienen una y `SetThreadDesktop` devuelve el error 170 (ocupado).
-4. Todas las acciones van por **patrones de UIA**, sin ratón ni `SendInput`, que irían al escritorio
-   de entrada (el de verdad).
+1. `CreateDesktop` creates a new Win32 desktop in the `WinSta0` window station, which is never activated.
+2. The app is launched with `CreateProcess` and `STARTUPINFO.lpDesktop = "WinSta0\\faena-..."`: its
+   windows are born there and do not appear on the person's desktop or in the window manager.
+3. Each UI Automation call runs on a new MTA thread whose first step is `SetThreadDesktop`: UIA only sees
+   the windows of its thread's desktop. It has to be a thread with no windows, so a COM STA thread will not
+   do, because those already have one and `SetThreadDesktop` returns error 170 (busy).
+4. Every action goes through **UIA patterns**, with no mouse and no `SendInput`, which would go to the
+   input desktop (the real one).
 
-Probado el 28-10-2026 en Windows 11 (26200) con la app de ejemplo en WinForms: se observa, se escribe, se
-pulsa, se abre y se contesta un diálogo modal, y la captura (`PrintWindow`) sale bien. Mientras tanto no
-apareció nada en el escritorio real.
+Tested on 2026-10-28 on Windows 11 (26200) with the WinForms example app: it observes, types, presses,
+opens and answers a modal dialog, and the screenshot (`PrintWindow`) comes out fine. Meanwhile nothing
+appeared on the real desktop.
 
-## Lo que ve el modelo
+## What the model sees
 
-Las ventanas de nivel superior del escritorio oculto (en el modo visible, las del proceso) y los
-**diálogos**. UIA cuelga un diálogo (un `MessageBox`, un «Guardar como») de su ventana propietaria, no del
-escritorio, así que se buscan dentro de cada ventana y van primero, con la etiqueta `[marco: diálogo «…»
-(delante)]`. La principal se reconoce por su HWND, porque un diálogo puede llamarse igual que ella.
+The top-level windows of the hidden desktop (in visible mode, those of the process) and the **dialogs**.
+UIA hangs a dialog (a `MessageBox`, a "Save as") from its owner window, not from the desktop, so they are
+looked for inside each window and come first, labelled `[marco: diálogo «...» (delante)]`. The main window
+is recognized by its HWND, because a dialog can have the same name.
 
-Se recorre la vista de controles (`ControlViewWalker`, profundidad ≤ 25, tope 150) **sin la barra de
-título**: minimizar, maximizar, cerrar y el menú del sistema no son del programa. Los tipos con los que se
-actúa se nombran como en la web: Button/SplitButton «el botón», Edit «el campo», Document «el documento»,
-MenuItem «la opción del menú», ComboBox «el desplegable», CheckBox «la casilla», RadioButton «la opción»,
-ListItem «el elemento de la lista», TabItem «la pestaña», TreeItem «el elemento», Hyperlink «el enlace»,
-DataItem «la fila», Slider, Spinner. Valor = `ValuePattern` (contraseñas como `••••`) o la selección;
-estado = marcado / abierto / seleccionado / deshabilitado. El «texto visible» son el título de cada ventana,
-los `Text`/`Header`/`StatusBar` y el contenido de los `Document` (`TextPattern`), hasta 2000 caracteres.
-La «url» de la observación es `proceso — título`.
+The control view is walked (`ControlViewWalker`, depth ≤ 25, at most 150) **without the title bar**:
+minimize, maximize, close and the system menu do not belong to the program. The control types it acts on
+are named as in the web (in the model's text): Button/SplitButton "the button", Edit "the field", Document
+"the document", MenuItem "the menu option", ComboBox "the drop-down", CheckBox "the checkbox", RadioButton
+"the option", ListItem "the list item", TabItem "the tab", TreeItem "the item", Hyperlink "the link",
+DataItem "the row", Slider, Spinner. Value = `ValuePattern` (passwords as `••••`) or the selection; state =
+checked / expanded / selected / disabled. The "visible text" is the title of each window, the
+`Text`/`Header`/`StatusBar` controls and the content of `Document` controls (`TextPattern`), up to 2000
+characters. The observation's "url" is `process — title`.
 
-## Acciones
+## Actions
 
-| acción | cómo |
+| action | how |
 |---|---|
-| clic | Botón Win32 con HWND (incluye WinForms y los de los diálogos): `PostMessage(padre, WM_COMMAND, BN_CLICKED\|id, hwnd)`. Si no: `ExpandCollapse` (menús, desplegables, árboles), `Invoke`, `Toggle`, `SelectionItem.Select`. La pulsación tiene un tope de 3 s: si no vuelve, se da por hecha. |
-| escribir | `ValuePattern.SetValue` (sustituye). Sin `ValuePattern` → error explicado. |
-| elegir | `ExpandCollapse.Expand` del desplegable, `SelectionItem.Select` del `ListItem` con ese nombre (sin distinguir mayúsculas); si es editable y no hay opción, `SetValue`. |
-| tecla | `WM_KEYDOWN`/`WM_CHAR`/`WM_KEYUP` por `PostMessage` a la ventana del último control tocado (o al diálogo de delante). Enter, Tab, Escape, flechas, Re/AvPág, Inicio/Fin, Supr, Retroceso, Espacio y caracteres sueltos. |
-| señalar | solo comprueba que el control está (no hay cursor que mover). |
-| ir | no existe: no hay urls. |
+| clic | Win32 button with an HWND (including WinForms and dialog buttons): `PostMessage(parent, WM_COMMAND, BN_CLICKED\|id, hwnd)`. Otherwise: `ExpandCollapse` (menus, drop-downs, trees), `Invoke`, `Toggle`, `SelectionItem.Select`. The press has a 3 s limit: if it does not return, it is taken as done. |
+| escribir | `ValuePattern.SetValue` (replaces). Without `ValuePattern` → an explained error. |
+| elegir | `ExpandCollapse.Expand` on the drop-down, `SelectionItem.Select` on the `ListItem` with that name (case-insensitive); if it is editable and there is no such option, `SetValue`. |
+| tecla | `WM_KEYDOWN`/`WM_CHAR`/`WM_KEYUP` through `PostMessage` to the window of the last control touched (or to the dialog in front). Enter, Tab, Escape, arrows, Page Up/Down, Home/End, Delete, Backspace, Space and single characters. |
+| señalar | only checks that the control is there (there is no cursor to move). |
+| ir | does not exist: there are no urls. |
 
-**Por qué los botones no van por `Invoke`:** el proveedor de UIA de WinForms (y el de MSAA en general)
-ejecuta `Invoke` de forma síncrona dentro de la app. Si el botón abre un diálogo modal, la llamada no vuelve
-hasta que se cierra el diálogo, y mientras tanto la app no contesta a ninguna otra petición de UIA, de modo
-que la siguiente observación se queda colgada hasta el timeout de UIA (~80 s). `WM_COMMAND` es justo lo que
-manda el propio botón a su padre al soltarlo: es asíncrono y no necesita foco.
+**Why buttons do not go through `Invoke`:** the WinForms UIA provider (and the MSAA one in general) runs
+`Invoke` synchronously inside the app. If the button opens a modal dialog, the call does not return until
+the dialog is closed, and meanwhile the app does not answer any other UIA request, so the next observation
+hangs until the UIA timeout (~80 s). `WM_COMMAND` is exactly what the button itself sends to its parent
+when released: it is asynchronous and needs no focus.
 
-## Selector duradero
+## Durable selector
 
-Los pasos que se apuntan (y los de las habilidades) usan el formato de pasos de siempre (el de los proyectos de tramoya) con un selector propio:
+The recorded steps (and those of skills) use the usual step format (the one of tramoya projects) with a
+selector of their own:
 
 ```
-uia=<ControlType>[ventana="<título del diálogo>"][id="<AutomationId>"|name="<nombre>"][n="<k>"]
+uia=<ControlType>[ventana="<dialog title>"][id="<AutomationId>"|name="<name>"][n="<k>"]
 ```
 
-- `id`: el `AutomationId` si es fiable (no vacío, no un número de 5+ cifras, no un id de runtime
-  `42.1.2.3`); si no, `name`. Se escribe uno de los dos.
-- `ventana`: solo cuando el control está en un diálogo; sin ella se busca primero en la principal.
-- `n`: cuál de los que coinciden (desde 1), si hay gemelos.
-- `<ControlType>` sin el prefijo `ControlType.` (`Button`, `Edit`…) o `*`.
-- Ejemplos: `uia=Edit[id="titulo"]`, `uia=Button[name="Añadir"]`, `uia=Button[ventana="Notas"][name="Sí"]`.
+- `id`: the `AutomationId` if it is reliable (not empty, not a number of 5+ digits, not a runtime id like
+  `42.1.2.3`); otherwise, `name`. One of the two is written.
+- `ventana`: only when the control is in a dialog; without it the main window is searched first.
+- `n`: which of the matches (from 1), if there are twins.
+- `<ControlType>` without the `ControlType.` prefix (`Button`, `Edit`...) or `*`.
+- Examples: `uia=Edit[id="titulo"]`, `uia=Button[name="Añadir"]`, `uia=Button[ventana="Notas"][name="Sí"]`.
 
-`RepetirAsync` lo resuelve (reintenta hasta 10 s, o 3 s si el paso es `opcional`) y hace la misma
-acción. `SelectorUia.Parse`/`ToString` son ida y vuelta.
+`RepetirAsync` resolves it (retries for up to 10 s, or 3 s if the step is `opcional`) and performs the same
+action. `SelectorUia.Parse`/`ToString` round-trip.
 
-## Lo que no va (o va a medias)
+## What does not work (or only partly)
 
-- **Apps de la Tienda / empaquetadas** (Bloc de notas, Calculadora, Paint y Recortes de Windows 11): el
-  ejecutable de System32 es un lanzador que activa la app por el shell, **en el escritorio de verdad**. En
-  modo oculto se rechazan de antemano (`notepad`, `calc`, `mspaint`, `snippingtool`, `wordpad`, `write`,
-  `explorer`, `control`, y cualquier ruta bajo `\WindowsApps\`). Con `oculto: false` se pueden usar, pero
-  se ven. Si una app desconocida delega en otra, `AbrirAsync` da `TimeoutException` («se ha cerrado sin abrir
-  ventana») y puede que algo haya salido en el escritorio real: no hay forma de saberlo antes.
-- **Combinaciones de teclas** (Ctrl+S, Alt+F4): sin teclado de verdad no hay modificadores; se rechazan
-  con un mensaje que pide usar la opción del menú.
-- **Teclas en general**: van por mensaje y las ve la ventana a la que se mandan; las apps que leen el
-  teclado con `GetKeyState`/raw input, o las que no son Win32 clásicas, pueden no enterarse.
-- **Controles sin patrones** (dibujados a mano, juegos, lienzos): no se pueden pulsar sin ratón.
-- **Capturas**: `PrintWindow(PW_RENDERFULLCONTENT)`. En el escritorio oculto no hay composición; con
-  WinForms/Win32 salen bien (probado); las apps que pintan por DirectX/WinUI pueden salir en negro.
-- **Menús emergentes Win32** (`#32768`) en el escritorio oculto: no probados.
-- **Elevación**: una app que pide UAC no puede abrirse en el escritorio oculto (el diálogo de UAC va al
-  escritorio seguro).
-- **Sesión**: hace falta una sesión interactiva desbloqueada en la estación `WinSta0`. Desde un servicio o
-  la sesión 0 no hay escritorio en el que crear el oculto.
+- **Store / packaged apps** (Notepad, Calculator, Paint and Snipping Tool on Windows 11): the System32
+  executable is a launcher that activates the app through the shell, **on the real desktop**. In hidden
+  mode they are rejected up front (`notepad`, `calc`, `mspaint`, `snippingtool`, `wordpad`, `write`,
+  `explorer`, `control`, and any path under `\WindowsApps\`). With `oculto: false` they can be used, but
+  they are visible. If an unknown app hands off to another one, `AbrirAsync` throws `TimeoutException` ("it
+  closed without opening a window") and something may have appeared on the real desktop: there is no way to
+  know beforehand.
+- **Key combinations** (Ctrl+S, Alt+F4): without a real keyboard there are no modifiers; they are rejected
+  with a message asking to use the menu option.
+- **Keys in general**: they go by message and are seen by the window they are sent to; apps that read the
+  keyboard with `GetKeyState`/raw input, or that are not classic Win32, may not notice.
+- **Controls without patterns** (hand-drawn, games, canvases): they cannot be pressed without a mouse.
+- **Screenshots**: `PrintWindow(PW_RENDERFULLCONTENT)`. On the hidden desktop there is no composition; with
+  WinForms/Win32 they come out fine (tested); apps that paint through DirectX/WinUI may come out black.
+- **Win32 pop-up menus** (`#32768`) on the hidden desktop: not tested.
+- **Elevation**: an app that asks for UAC cannot be opened on the hidden desktop (the UAC dialog goes to the
+  secure desktop).
+- **Session**: an unlocked interactive session in the `WinSta0` station is required. From a service or
+  session 0 there is no desktop in which to create the hidden one.
 
-## Pruebas
+## Tests
 
-- `tests/Faena.Tests/DesktopTests.cs`: selector, tipos, rechazo de apps de la Tienda y prompt, siempre.
-  Con `FAENA_DESKTOP_TESTS=1`, la app de notas de `examples/escritorio/NotasEscritorio` (se
-  compila sola si falta) en un escritorio oculto: observar, escribir, pulsar, repetir por selector, el
-  diálogo modal de «Borrar todo» contestado con «No», y la captura.
-- Demo con Ollama: `examples/escritorio/Demo` (`dotnet run -c Release -- <exe> <carpeta> todas`).
+- `tests/Faena.Tests/DesktopTests.cs`: selector, types, rejection of Store apps and prompt, always. With
+  `FAENA_DESKTOP_TESTS=1`, the notes app in `examples/escritorio/NotasEscritorio` (built automatically if
+  missing) on a hidden desktop: observe, type, press, replay by selector, the "Borrar todo" modal dialog
+  answered with "No", and the screenshot.
+- Demo with Ollama: `examples/escritorio/Demo` (`dotnet run -c Release -- <exe> <folder> todas`).
 
 ## Antivirus
 
-Lanzar un programa en un escritorio que no se ve es lo mismo que hacen algunos programas maliciosos, y
-un antivirus con heurística de comportamiento puede desconfiar de un exe recién compilado. Con
-Malwarebytes, la `NotasEscritorio.dll` de los ejemplos, compilada en el momento, acaba en cuarentena en
-cuanto faena la abre en el escritorio oculto (la app se cierra sin ventana y faena dice «se ha cerrado sin
-abrir ventana»). Si pasa, hay que añadir una exclusión para la carpeta del programa (o la del repo).
-
+Launching a program on a desktop nobody sees is the same thing some malware does, and an antivirus with
+behavioural heuristics may distrust a freshly built exe. With Malwarebytes, the examples'
+`NotasEscritorio.dll`, built on the spot, ends up in quarantine as soon as faena opens it on the hidden
+desktop (the app closes without a window and faena says "it closed without opening a window"). If that
+happens, add an exclusion for the program's folder (or the repo's).

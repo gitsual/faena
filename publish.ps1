@@ -36,36 +36,36 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     $env:PATH = 'C:\Program Files\dotnet;' + $env:PATH
 }
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw 'No encuentro dotnet (ni en el PATH ni en C:\Program Files\dotnet).'
+    throw 'dotnet not found (neither on the PATH nor in C:\Program Files\dotnet).'
 }
 
 # Version from Directory.Build.props, the single place where it lives.
 $props = Get-Content (Join-Path $raiz 'Directory.Build.props') -Raw
 if ($props -notmatch '<Version>\s*([^<\s]+)\s*</Version>') {
-    throw 'Directory.Build.props no tiene <Version>.'
+    throw 'Directory.Build.props has no <Version>.'
 }
 $version = $Matches[1]
 
-Write-Host "== faena ${version}: dotnet publish (Release, win-x64, un solo fichero) =="
+Write-Host "== faena ${version}: dotnet publish (Release, win-x64, single file) =="
 if (Test-Path $dist) {
     Remove-Item $dist -Recurse -Force
 }
 New-Item -ItemType Directory -Force $dist | Out-Null
 & dotnet publish $csproj -c Release -r win-x64 -o $dist
 if ($LASTEXITCODE -ne 0) {
-    throw "dotnet publish ha fallado (codigo $LASTEXITCODE)."
+    throw "dotnet publish failed (code $LASTEXITCODE)."
 }
 # The embedded pdbs are inside the exe already; loose ones only add weight.
 Get-ChildItem $dist -Filter *.pdb | Remove-Item -Force
 
 if ($Navegador) {
-    Write-Host "== Chromium desde $Navegador =="
+    Write-Host "== Chromium from $Navegador =="
     $destino = Join-Path $dist 'navegador'
     New-Item -ItemType Directory -Force $destino | Out-Null
     foreach ($patron in 'chromium-*', 'chromium_headless_shell-*', 'winldd-*') {
         $carpeta = Get-ChildItem $Navegador -Directory -Filter $patron | Sort-Object Name -Descending | Select-Object -First 1
         if (-not $carpeta) {
-            throw "En $Navegador no hay ninguna carpeta $patron."
+            throw "There is no $patron folder in $Navegador."
         }
         Copy-Item $carpeta.FullName (Join-Path $destino $carpeta.Name) -Recurse
     }
@@ -99,4 +99,4 @@ if (-not $SinZip) {
     Write-Host "== $zip =="
     Compress-Archive -Path $dist -DestinationPath $zip
 }
-Write-Host "Listo: $dist"
+Write-Host "Done: $dist"
