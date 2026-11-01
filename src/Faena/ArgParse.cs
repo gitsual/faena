@@ -3,6 +3,10 @@
 // nested subparsers with aliases, `--version`), with usage, help and error texts laid
 // out the way argparse lays them out (taken from tramoya, whose CLI mirrors a Python one).
 //
+// faena speaks two languages: an option can have a second name (`--background` / `--fondo`). Both
+// are always accepted; the help shows the one of the interface's language, and the value is kept
+// under the Spanish name's dest, so the handlers read the same key whatever was typed.
+//
 // Parsing is strict in the argparse sense: `--help` wins wherever it appears, an unknown
 // flag or a missing required one prints the usage and exits with 2, and a subcommand
 // swallows every argument after it.
@@ -25,6 +29,8 @@ internal sealed class ArgSpec
 {
     public required string Dest { get; init; }
     public string? Flag { get; init; }
+    /// <summary>The other names of the option (the other language's), accepted but not shown.</summary>
+    public string[] Alias { get; init; } = [];
     public bool Positional => Flag is null;
     public bool Switch { get; init; }
     public bool Append { get; init; }
@@ -35,8 +41,11 @@ internal sealed class ArgSpec
     public string? Help { get; init; }
     public ArgKind Kind { get; init; } = ArgKind.String;
 
+    /// <summary>How a positional is shown (its name in the interface's language) when it differs from its dest.</summary>
+    public string? Shown { get; init; }
+
     public string Metavar => Choices is { } c ? "{" + string.Join(",", c) + "}"
-        : Positional ? Dest : Dest.ToUpperInvariant();
+        : Positional ? Shown ?? Dest : (Shown ?? Flag!.TrimStart('-')).Replace('-', '_').ToUpperInvariant();
 
     /// <summary>How the argument shows in the usage line.</summary>
     public string Usage()
@@ -112,29 +121,41 @@ internal sealed class ArgParser
 
     // --- building -----------------------------------------------------------------
 
+    /// <summary>
+    /// An argument. <paramref name="es"/> is the option's Spanish name when it differs from the
+    /// English <paramref name="name"/>: the dest comes from it, both names are accepted and the help
+    /// shows the one of <see cref="Faena.Agente.Lengua.Actual"/>.
+    /// </summary>
     public ArgParser Add(string name, string? help = null, string? @default = null, bool required = false,
-                         string[]? choices = null, ArgKind kind = ArgKind.String, bool optional = false)
+                         string[]? choices = null, ArgKind kind = ArgKind.String, bool optional = false, string? es = null)
     {
         var positional = !name.StartsWith("--", StringComparison.Ordinal);
+        var (flag, alias) = Nombres(name, es);
         _specs.Add(new ArgSpec
         {
-            Dest = positional ? name : DestOf(name), Flag = positional ? null : name, Help = help,
+            Dest = positional ? es ?? name : DestOf(es ?? name), Flag = positional ? null : flag, Shown = positional && es is not null ? flag : null, Alias = alias, Help = help,
             Default = @default, Required = required, Choices = choices, Kind = kind, Optional = optional,
         });
         return this;
     }
 
-    public ArgParser AddSwitch(string flag, string? help = null)
+    public ArgParser AddSwitch(string flag, string? help = null, string? es = null)
     {
-        _specs.Add(new ArgSpec { Dest = DestOf(flag), Flag = flag, Switch = true, Help = help });
+        var (shown, alias) = Nombres(flag, es);
+        _specs.Add(new ArgSpec { Dest = DestOf(es ?? flag), Flag = shown, Alias = alias, Switch = true, Help = help });
         return this;
     }
 
-    public ArgParser AddAppend(string flag, string? help = null)
+    public ArgParser AddAppend(string flag, string? help = null, string? es = null)
     {
-        _specs.Add(new ArgSpec { Dest = DestOf(flag), Flag = flag, Append = true, Help = help });
+        var (shown, alias) = Nombres(flag, es);
+        _specs.Add(new ArgSpec { Dest = DestOf(es ?? flag), Flag = shown, Alias = alias, Append = true, Help = help });
         return this;
     }
+
+    /// <summary>The name to show (the interface's language) and the one accepted besides.</summary>
+    private static (string Flag, string[] Alias) Nombres(string en, string? es) =>
+        es is null || es == en ? (en, []) : Faena.Agente.Lengua.Es ? (es, [en]) : (en, [es]);
 
     public ArgParser AddVersion(string version)
     {
@@ -185,7 +206,7 @@ internal sealed class ArgParser
                     inline = token[(eq + 1)..];
                     token = token[..eq];
                 }
-                var spec = _specs.FirstOrDefault(s => s.Flag == token);
+                var spec = _specs.FirstOrDefault(s => s.Flag == token || s.Alias.Contains(token));
                 if (spec is null)
                 {
                     unknown.Add(argv[i]);
@@ -195,7 +216,7 @@ internal sealed class ArgParser
                 if (spec.Switch)
                 {
                     if (inline is not null)
-                        Error($"argument {spec.Flag}: ignored explicit argument '{inline}'");
+                        Error(T($"argumento {spec.Flag}: sobra el valor '{inline}'", $"argument {spec.Flag}: ignored explicit argument '{inline}'"));
                     result.Set(spec.Dest, true);
                     continue;
                 }
@@ -206,7 +227,7 @@ internal sealed class ArgParser
                     value = argv[++i];
                 else
                 {
-                    Error($"argument {spec.Flag}: expected one argument");
+                    Error(T($"argumento {spec.Flag}: falta su valor", $"argument {spec.Flag}: expected one argument"));
                     return result;
                 }
                 Validate(spec, value);
@@ -230,10 +251,10 @@ internal sealed class ArgParser
             if (_subDest is not null)
             {
                 if (!_subByName.TryGetValue(token, out var sub))
-                    Error($"argument {_subDest}: invalid choice: '{token}' (choose from {SubChoices()})");
+                    Error(T($"argumento {_subDest}: no conozco '{token}' (elige entre {SubChoices()})", $"argument {_subDest}: invalid choice: '{token}' (choose from {SubChoices()})"));
                 CheckMissing(result, positionals, seen, subcommandSeen: true);
                 if (unknown.Count > 0)
-                    Error($"unrecognized arguments: {string.Join(" ", unknown)}");
+                    Error(T($"argumentos desconocidos: {string.Join(" ", unknown)}", $"unrecognized arguments: {string.Join(" ", unknown)}"));
                 result.Set(_subDest, sub!.Name);
                 var nested = sub.Parse(argv.Skip(i + 1).ToList());
                 foreach (var dest in nested.Dests())
@@ -246,7 +267,7 @@ internal sealed class ArgParser
 
         CheckMissing(result, positionals, seen, subcommandSeen: false);
         if (unknown.Count > 0)
-            Error($"unrecognized arguments: {string.Join(" ", unknown)}");
+            Error(T($"argumentos desconocidos: {string.Join(" ", unknown)}", $"unrecognized arguments: {string.Join(" ", unknown)}"));
         result.Handler = Handler;
         return result;
     }
@@ -258,11 +279,11 @@ internal sealed class ArgParser
     {
         var label = spec.Positional ? spec.Dest : spec.Flag!;
         if (spec.Choices is { } choices && !choices.Contains(value))
-            Error($"argument {label}: invalid choice: '{value}' (choose from {string.Join(", ", choices)})");
+            Error(T($"argumento {label}: no vale '{value}' (elige entre {string.Join(", ", choices)})", $"argument {label}: invalid choice: '{value}' (choose from {string.Join(", ", choices)})"));
         if (spec.Kind == ArgKind.Float && !double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-            Error($"argument {label}: invalid float value: '{value}'");
+            Error(T($"argumento {label}: '{value}' no es un número", $"argument {label}: invalid float value: '{value}'"));
         if (spec.Kind == ArgKind.Int && !int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
-            Error($"argument {label}: invalid int value: '{value}'");
+            Error(T($"argumento {label}: '{value}' no es un número entero", $"argument {label}: invalid int value: '{value}'"));
     }
 
     private void CheckMissing(ParsedArgs result, Queue<ArgSpec> positionals, HashSet<string> seen, bool subcommandSeen)
@@ -281,13 +302,15 @@ internal sealed class ArgParser
         if (_subDest is not null && !subcommandSeen)
             missing.Add(_subDest);
         if (missing.Count > 0)
-            Error($"the following arguments are required: {string.Join(", ", missing)}");
+            Error(T($"faltan estos argumentos: {string.Join(", ", missing)}", $"the following arguments are required: {string.Join(", ", missing)}"));
     }
 
     private string SubChoices() => string.Join(", ", _subByName.Keys.Select(k => $"'{k}'"));
 
     /// <summary>argparse's metavar for the subcommands: names and aliases, in order of definition.</summary>
-    private string SubChoicesBraced() => "{" + string.Join(",", _subByName.Keys) + "}";
+    private string SubChoicesBraced() => "{" + string.Join(",", _subparsers.Select(s => s.Name)) + "}";
+
+    private static string T(string es, string en) => Faena.Agente.Lengua.T(es, en);
 
     private void Error(string message) =>
         throw new ArgParseExit(2, FormatUsage() + $"{Prog}: error: {message}\n");
@@ -364,9 +387,12 @@ internal sealed class ArgParser
                 positionalRows.Add((invocation, sub.Help, 4));
             }
         }
-        var optionRows = new List<(string Invocation, string? Help, int Indent)> { ("-h, --help", "show this help message and exit", 2) };
+        var optionRows = new List<(string Invocation, string? Help, int Indent)>
+        {
+            ("-h, --help", Faena.Agente.Lengua.T("muestra esta ayuda y sale", "show this help message and exit"), 2),
+        };
         if (_version is not null)
-            optionRows.Add(("--version", "show program's version number and exit", 2));
+            optionRows.Add(("--version", Faena.Agente.Lengua.T("muestra la versión y sale", "show program's version number and exit"), 2));
         foreach (var spec in _specs.Where(s => !s.Positional))
             optionRows.Add((spec.Invocation(), spec.Help, 2));
         rows.AddRange(positionalRows);
@@ -375,11 +401,11 @@ internal sealed class ArgParser
         var helpPosition = Math.Min(rows.Max(r => r.Invocation.Length + r.Indent) + 2, MaxHelpPosition);
         if (positionalRows.Count > 0)
         {
-            sb.Append("\npositional arguments:\n");
+            sb.Append(Faena.Agente.Lengua.T("\nargumentos:\n", "\npositional arguments:\n"));
             foreach (var row in positionalRows)
                 sb.Append(FormatRow(row, helpPosition));
         }
-        sb.Append("\noptions:\n");
+        sb.Append(Faena.Agente.Lengua.T("\nopciones:\n", "\noptions:\n"));
         foreach (var row in optionRows)
             sb.Append(FormatRow(row, helpPosition));
         return sb.ToString();

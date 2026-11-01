@@ -1,7 +1,7 @@
-// `faena hacer` and `faena habilidades`: the agent as a local worker. It does the task, headless
+// `faena do` and `faena skills` (hacer, habilidades): the agent as a local worker. It does the task, headless
 // by default, writes a log and a report per run, stops before anything irreversible unless it
 // was allowed, and learns procedures as skills it can replay next time. The words people read
-// are Spanish.
+// follow Lengua (English by default, Spanish to choose).
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -18,7 +18,7 @@ internal static class Hacer
 
     // --- seams for the tests -----------------------------------------------------------
 
-    internal static Func<string?, string?, IChatBackend> PickBackend { get; set; } = (name, model) => Backends.Pick(name, model);
+    internal static Func<string?, string?, IChatBackend> PickBackend { get; set; } = (name, model) => Ajustes.Backend(name, model, Ajustes.Leer());
 
     /// <summary>Opens the web (url, show the window, profile) and returns the surface and what closes it.</summary>
     internal static Func<string, bool, string, Task<(ISuperficie Superficie, IAsyncDisposable Cierre)>> AbrirWeb { get; set; } = AbrirWebDefault;
@@ -37,51 +37,64 @@ internal static class Hacer
 
     public static void Registrar(ArgParser ap)
     {
-        var p = ap.AddSubparser("command", "hacer", help: "la IA hace la tarea en segundo plano: registro, informe y " +
-                                                          "parada ante lo irreversible", aliases: "do-task");
-        p.Add("goal", help: "lo que tiene que hacer, en lenguaje natural");
-        p.Add("--url", help: "la web donde empieza (si no, el inicio de la habilidad)");
-        p.Add("--app", help: "una aplicación de escritorio (exe) en vez de una web");
-        p.Add("--args", help: "argumentos para --app");
-        p.Add("--ventana", help: "con --app: el título (o parte) de la ventana a manejar");
-        p.AddSwitch("--ver", help: "con ventana, para mirarlo (por defecto, sin ventana y sin tocar tu escritorio)");
-        p.Add("--max-pasos", kind: ArgKind.Int, @default: "30");
-        p.Add("--max-minutos", kind: ArgKind.Float, @default: "10");
-        p.AddAppend("--permitir", help: "categoría irreversible que puede hacer sin preguntar: enviar, borrar, pagar, aceptar, " +
-                                        "irreversible o * (todas); repetible o separada por comas");
-        p.AddSwitch("--fondo", help: "nunca preguntar: ante lo irreversible, parar y dejarlo en el informe");
-        p.AddSwitch("--capturas", help: "guardar una captura tras cada paso");
-        p.Add("--habilidad", help: "usar esta habilidad (si no, se elige sola entre las que encajan)");
-        p.AddSwitch("--sin-habilidades", help: "razonar desde cero");
-        p.AddSwitch("--sin-modelo", help: "con --habilidad: repetirla sin preguntar a ningún modelo (valores con --param)");
-        p.AddAppend("--param", help: "con --sin-modelo: nombre=valor de un parámetro de la habilidad; repetible");
-        p.Add("--aprender", help: "si sale bien, guardar lo hecho como habilidad con este nombre");
-        p.Add("--carpeta", help: "dónde dejar el log y el informe (por defecto, una carpeta nueva en tareas)");
-        p.Add("--backend", choices: new[] { "ollama", "claude", "openai" });
-        p.Add("--model");
-        p.AddSwitch("--no-reparar", help: "si un paso de la habilidad falla y el modelo termina la tarea, no reescribir la habilidad");
-        p.AddSwitch("--dry-run", help: "muestra lo que haría sin abrir nada ni llamar al modelo");
-        p.AddSwitch("--preguntar-en-carpeta", help: "ante lo irreversible, dejar pregunta.json en la carpeta y esperar respuesta.json " +
-                                                    "(lo usa la ventana de faena)");
+        static string T(string es, string en) => Lengua.T(es, en);
+        var (nombre, alias) = Cli.Comando("do", "hacer", "do-task");
+        var p = ap.AddSubparser("command", nombre, help: T("la IA hace la tarea en segundo plano: registro, informe y parada ante lo irreversible",
+                                                           "the AI does the task in the background: log, report and a stop before anything irreversible"), aliases: alias);
+        p.Add("goal", es: "objetivo", help: T("lo que tiene que hacer, en lenguaje natural", "what it has to do, in plain words"));
+        p.Add("--url", help: T("la web donde empieza (si no, el inicio de la habilidad)", "the website where it starts (otherwise, the skill's start)"));
+        p.Add("--app", help: T("una aplicación de escritorio (exe) en vez de una web", "a desktop application (exe) instead of a website"));
+        p.Add("--args", help: T("argumentos para --app", "arguments for --app"));
+        p.Add("--window-title", help: T("con --app: el título (o parte) de la ventana a manejar", "with --app: the title (or part of it) of the window to work on"), es: "--ventana");
+        p.AddSwitch("--show", help: T("con ventana, para mirarlo (por defecto, sin ventana y sin tocar tu escritorio)",
+                                      "with a visible window, to watch it (by default, no window and your desktop untouched)"), es: "--ver");
+        p.Add("--max-steps", kind: ArgKind.Int, @default: "30", help: T("tope de pasos", "step limit"), es: "--max-pasos");
+        p.Add("--max-minutes", kind: ArgKind.Float, @default: "10", help: T("tope de tiempo", "time limit"), es: "--max-minutos");
+        p.AddAppend("--allow", help: T("categoría irreversible que puede hacer sin preguntar: enviar, borrar, pagar, aceptar, irreversible o * (todas); repetible o separada por comas",
+                                       "irreversible category it may do without asking: send, delete, pay, accept (or enviar, borrar, pagar, aceptar), irreversible or * (all); repeatable or comma-separated"), es: "--permitir");
+        p.AddSwitch("--background", help: T("nunca preguntar: ante lo irreversible, parar y dejarlo en el informe",
+                                            "never ask: before anything irreversible, stop and leave it in the report"), es: "--fondo");
+        p.AddSwitch("--screenshots", help: T("guardar una captura tras cada paso", "save a screenshot after each step"), es: "--capturas");
+        p.Add("--use-skill", help: T("usar esta habilidad (si no, se elige sola entre las que encajan)", "use this skill (otherwise it picks one that fits, if any)"), es: "--habilidad");
+        p.AddSwitch("--no-skills", help: T("razonar desde cero", "reason from scratch"), es: "--sin-habilidades");
+        p.AddSwitch("--no-model", help: T("con --habilidad: repetirla sin preguntar a ningún modelo (valores con --param)",
+                                          "with --use-skill: replay it without asking any model (values with --param)"), es: "--sin-modelo");
+        p.AddAppend("--param", help: T("con --sin-modelo: nombre=valor de un parámetro de la habilidad; repetible",
+                                       "with --no-model: name=value of a parameter of the skill; repeatable"));
+        p.Add("--learn", help: T("si sale bien, guardar lo hecho como habilidad con este nombre", "if it goes well, save what was done as a skill with this name"), es: "--aprender");
+        p.Add("--folder", help: T("dónde dejar el log y el informe (por defecto, una carpeta nueva en tareas)", "where to leave the log and the report (default: a new folder in tareas)"), es: "--carpeta");
+        p.Add("--backend", choices: new[] { "ollama", "claude", "openai" }, help: T("el modelo que piensa (por defecto, el de los ajustes o Ollama en este equipo)",
+                                                                                    "the model that thinks (default: the one in Settings, or Ollama on this computer)"));
+        p.Add("--model", help: T("el nombre del modelo", "the model's name"));
+        p.AddSwitch("--no-repair", help: T("si un paso de la habilidad falla y el modelo termina la tarea, no reescribir la habilidad",
+                                           "if a step of the skill fails and the model finishes the task, do not rewrite the skill"), es: "--no-reparar");
+        p.AddSwitch("--dry-run", help: T("muestra lo que haría sin abrir nada ni llamar al modelo", "show what it would do without opening anything or calling the model"));
+        p.AddSwitch("--ask-in-folder", help: T("ante lo irreversible, dejar pregunta.json en la carpeta y esperar respuesta.json (lo usa la ventana de faena)",
+                                               "before anything irreversible, leave pregunta.json in the folder and wait for respuesta.json (the faena window uses it)"), es: "--preguntar-en-carpeta");
         p.Handler = CmdHacer;
 
-        p = ap.AddSubparser("command", "habilidades", help: "los procedimientos aprendidos que usa `hacer`", aliases: "skills");
-        var d = p.AddSubparser("habilidades_cmd", "lista", help: "las habilidades que hay");
+        (nombre, alias) = Cli.Comando("skills", "habilidades");
+        p = ap.AddSubparser("command", nombre, help: T("los procedimientos aprendidos que usa `hacer`", "the learned procedures `do` uses"), aliases: alias);
+        (nombre, alias) = Cli.Comando("list", "lista");
+        var d = p.AddSubparser("habilidades_cmd", nombre, help: T("las habilidades que hay", "the skills there are"), aliases: alias);
         d.Handler = CmdLista;
-        d = p.AddSubparser("habilidades_cmd", "ver", help: "el .toml de una habilidad");
-        d.Add("nombre");
+        (nombre, alias) = Cli.Comando("show", "ver");
+        d = p.AddSubparser("habilidades_cmd", nombre, help: T("el .toml de una habilidad", "a skill's .toml"), aliases: alias);
+        d.Add("name", es: "nombre");
         d.Handler = CmdVer;
-        d = p.AddSubparser("habilidades_cmd", "aprender", help: "crear una habilidad desde una tarea hecha (su carpeta o " +
-                                                                 "informe.json) o un proceso grabado en tramoya (su id o carpeta)");
-        d.Add("origen");
-        d.Add("--nombre", required: true);
-        d.Add("--descripcion", help: "qué consigue, en una frase (por defecto, el objetivo o el nombre del proyecto)");
-        d.Add("--cuando", help: "expresiones que la delatan en un objetivo, separadas por «;»");
-        d.AddSwitch("--force", help: "sustituir una que ya exista");
+        (nombre, alias) = Cli.Comando("learn", "aprender");
+        d = p.AddSubparser("habilidades_cmd", nombre, help: T("crear una habilidad desde una tarea hecha (su carpeta o informe.json) o un proceso grabado en tramoya (su id o carpeta)",
+                                                              "create a skill from a finished task (its folder or informe.json) or a process recorded in tramoya (its id or folder)"), aliases: alias);
+        d.Add("source", es: "origen");
+        d.Add("--name", required: true, es: "--nombre");
+        d.Add("--description", help: T("qué consigue, en una frase (por defecto, el objetivo o el nombre del proyecto)", "what it achieves, in one sentence (default: the goal or the project's name)"), es: "--descripcion");
+        d.Add("--when", help: T("expresiones que la delatan en un objetivo, separadas por «;»", "phrases that give it away in a goal, separated by “;”"), es: "--cuando");
+        d.AddSwitch("--force", help: T("sustituir una que ya exista", "replace one that already exists"));
         d.Handler = CmdAprender;
-        d = p.AddSubparser("habilidades_cmd", "importar", help: "traer las habilidades que aprendió tramoya (o las de otra carpeta)");
-        d.Add("carpeta", optional: true, help: $"de dónde (por defecto, {Paths.HabilidadesTramoya})");
-        d.AddSwitch("--force", help: "sustituir las que ya existan con el mismo nombre");
+        (nombre, alias) = Cli.Comando("import", "importar");
+        d = p.AddSubparser("habilidades_cmd", nombre, help: T("traer las habilidades que aprendió tramoya (o las de otra carpeta)", "bring over the skills tramoya learned (or those of another folder)"), aliases: alias);
+        d.Add("folder", es: "carpeta", optional: true, help: T($"de dónde (por defecto, {Paths.HabilidadesTramoya})", $"from where (default: {Paths.HabilidadesTramoya})"));
+        d.AddSwitch("--force", help: T("sustituir las que ya existan con el mismo nombre", "replace those that already exist with the same name"));
         d.Handler = CmdImportar;
     }
 
@@ -89,54 +102,59 @@ internal static class Hacer
 
     private static int CmdHacer(ParsedArgs args)
     {
-        var goal = args.GetRequired("goal").Trim();
+        static string T(string es, string en) => Lengua.T(es, en);
+        var goal = args.GetRequired("objetivo").Trim();
         var url = args.Get("url");
         var app = args.Get("app");
         var maxPasos = args.Int("max_pasos")!.Value;
         var maxMinutos = args.Double("max_minutos", 10);
-        if (goal.Length == 0) { Console.Error.WriteLine("Dime qué tiene que hacer."); return 2; }
-        if (maxPasos < 1 || maxMinutos <= 0) { Console.Error.WriteLine("--max-pasos y --max-minutos deben ser mayores que cero."); return 2; }
-        if (url is not null && app is not null) { Console.Error.WriteLine("Usa --url o --app, no los dos."); return 2; }
-        var permitidas = (args.List("permitir") ?? []).SelectMany(x => x.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToList();
-        var desconocidas = permitidas.Where(x => x != "*" && x != "irreversible" && !Guardian.Categorias.ContainsKey(x)).ToList();
+        if (goal.Length == 0) { Console.Error.WriteLine(T("Dime qué tiene que hacer.", "Tell me what it has to do.")); return 2; }
+        if (maxPasos < 1 || maxMinutos <= 0) { Console.Error.WriteLine(T("--max-pasos y --max-minutos deben ser mayores que cero.", "--max-steps and --max-minutes must be greater than zero.")); return 2; }
+        if (url is not null && app is not null) { Console.Error.WriteLine(T("Usa --url o --app, no los dos.", "Use --url or --app, not both.")); return 2; }
+        var pedidas = (args.List("permitir") ?? []).SelectMany(x => x.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToList();
+        var desconocidas = pedidas.Where(x => Guardian.CategoriaDe(x) is null).ToList();
         if (desconocidas.Count != 0)
         {
-            Console.Error.WriteLine($"--permitir: no conozco {string.Join(", ", desconocidas)}; usa {string.Join(", ", Guardian.Categorias.Keys)}, irreversible o *.");
+            Console.Error.WriteLine(T($"--permitir: no conozco {string.Join(", ", desconocidas)}; usa {string.Join(", ", Guardian.Categorias.Keys)}, irreversible o *.",
+                $"--allow: unknown {string.Join(", ", desconocidas)}; use {string.Join(", ", Guardian.CategoriasEn.Values)}, irreversible or *."));
             return 2;
         }
+        // Kept as faena names them («send» → «enviar»): that is what the guard and the report use.
+        var permitidas = pedidas.Select(x => Guardian.CategoriaDe(x)!).Distinct().ToList();
 
         var avisos = new List<string>();
         AvisarDeTramoya();
         var habilidades = args.Flag("sin_habilidades") ? [] : Agente.Habilidades.Cargar(Paths.Habilidades, avisos);
-        foreach (var a in avisos) Console.Error.WriteLine($"Aviso: habilidad ilegible: {a}");
+        foreach (var a in avisos) Console.Error.WriteLine(T($"Aviso: habilidad ilegible: {a}", $"Warning: unreadable skill: {a}"));
         var forzada = args.Get("habilidad");
         Habilidad? elegida = null;
         if (forzada is not null)
         {
             elegida = habilidades.FirstOrDefault(h => string.Equals(h.Nombre, forzada, StringComparison.OrdinalIgnoreCase));
-            if (elegida is null) { Console.Error.WriteLine($"No hay ninguna habilidad «{forzada}» en {Paths.Habilidades}."); return 2; }
+            if (elegida is null) { Console.Error.WriteLine(T($"No hay ninguna habilidad «{forzada}» en {Paths.Habilidades}.", $"There is no skill “{forzada}” in {Paths.Habilidades}.")); return 2; }
         }
         var sinModelo = args.Flag("sin_modelo");
         var valores = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var par in args.List("param") ?? [])
         {
             var igual = par.IndexOf('=');
-            if (igual <= 0) { Console.Error.WriteLine($"--param espera nombre=valor, no «{par}»."); return 2; }
+            if (igual <= 0) { Console.Error.WriteLine(T($"--param espera nombre=valor, no «{par}».", $"--param expects name=value, not “{par}”.")); return 2; }
             valores[par[..igual].Trim()] = par[(igual + 1)..];
         }
-        if (sinModelo && elegida is null) { Console.Error.WriteLine("--sin-modelo necesita --habilidad: sin modelo no hay quien elija ni razone."); return 2; }
-        if (valores.Count != 0 && !sinModelo) { Console.Error.WriteLine("--param solo vale con --sin-modelo (si no, los valores salen del objetivo)."); return 2; }
+        if (sinModelo && elegida is null) { Console.Error.WriteLine(T("--sin-modelo necesita --habilidad: sin modelo no hay quien elija ni razone.", "--no-model needs --use-skill: without a model nobody chooses or reasons.")); return 2; }
+        if (valores.Count != 0 && !sinModelo) { Console.Error.WriteLine(T("--param solo vale con --sin-modelo (si no, los valores salen del objetivo).", "--param only works with --no-model (otherwise the values come from the goal).")); return 2; }
         if (elegida is not null && valores.Keys.FirstOrDefault(k => !elegida.Parametros.ContainsKey(k)) is { } raro)
         {
-            Console.Error.WriteLine($"La habilidad «{elegida.Nombre}» no tiene el parámetro «{raro}» (tiene: {string.Join(", ", elegida.Parametros.Keys)}).");
+            Console.Error.WriteLine(T($"La habilidad «{elegida.Nombre}» no tiene el parámetro «{raro}» (tiene: {string.Join(", ", elegida.Parametros.Keys)}).",
+                $"The skill “{elegida.Nombre}” has no parameter “{raro}” (it has: {string.Join(", ", elegida.Parametros.Keys)})."));
             return 2;
         }
         // Sin sitio, el de la habilidad: «hazme esto» y ya sabe dónde.
         var escritorio = app is not null || (url is null && elegida?.Superficie == "escritorio");
         if (escritorio) app ??= elegida?.Inicio;
         else url ??= elegida?.Inicio;
-        if (!escritorio && string.IsNullOrEmpty(url)) { Console.Error.WriteLine("Falta dónde: --url <web> o --app <programa> (o una --habilidad con inicio)."); return 2; }
-        if (escritorio && string.IsNullOrEmpty(app)) { Console.Error.WriteLine("Falta la aplicación: --app <programa>."); return 2; }
+        if (!escritorio && string.IsNullOrEmpty(url)) { Console.Error.WriteLine(T("Falta dónde: --url <web> o --app <programa> (o una --habilidad con inicio).", "Where is missing: --url <website> or --app <program> (or a --use-skill with a start).")); return 2; }
+        if (escritorio && string.IsNullOrEmpty(app)) { Console.Error.WriteLine(T("Falta la aplicación: --app <programa>.", "The application is missing: --app <program>.")); return 2; }
         var superficie = escritorio ? "escritorio" : "web";
         var donde = (escritorio ? app : url)!;
         var ver = args.Flag("ver");
@@ -146,14 +164,15 @@ internal static class Hacer
         if (args.Flag("dry_run"))
         {
             var candidatas = elegida is not null ? [elegida] : Agente.Habilidades.Candidatas(goal, habilidades, superficie, donde);
-            Console.WriteLine($"objetivo: {goal}");
-            Console.WriteLine($"{(escritorio ? "aplicación" : "url")}: {donde}");
-            Console.WriteLine($"ventana: {(ver ? "a la vista" : escritorio ? "escritorio oculto" : "sin ventana")}");
-            Console.WriteLine($"límites: {maxPasos} pasos, {maxMinutos.ToString("0.#", CultureInfo.InvariantCulture)} min");
-            Console.WriteLine($"irreversible: {(permitidas.Count == 0 ? "preguntar o parar" : "permitido " + string.Join(", ", permitidas))}");
-            Console.WriteLine($"habilidades: {(candidatas.Count == 0 ? "ninguna encaja" : string.Join(", ", candidatas.Select(h => h.Nombre)))}");
-            if (sinModelo) Console.WriteLine($"modelo: ninguno{(valores.Count != 0 ? "; " + string.Join(", ", valores.Select(v => $"{v.Key} = «{v.Value}»")) : "")}");
-            Console.WriteLine($"carpeta: {carpeta}");
+            Console.WriteLine($"{T("objetivo", "goal")}: {goal}");
+            Console.WriteLine($"{(escritorio ? T("aplicación", "application") : "url")}: {donde}");
+            Console.WriteLine($"{T("ventana", "window")}: {(ver ? T("a la vista", "visible") : escritorio ? T("escritorio oculto", "hidden desktop") : T("sin ventana", "no window"))}");
+            Console.WriteLine($"{T("límites", "limits")}: {maxPasos} {T("pasos", "steps")}, {maxMinutos.ToString("0.#", CultureInfo.InvariantCulture)} min");
+            Console.WriteLine($"irreversible: {(permitidas.Count == 0 ? T("preguntar o parar", "ask or stop") : T("permitido ", "allowed ") + string.Join(", ", permitidas.Select(x => Guardian.NombreCategoria(x))))}");
+            Console.WriteLine($"{T("habilidades", "skills")}: {(candidatas.Count == 0 ? T("ninguna encaja", "none fits") : string.Join(", ", candidatas.Select(h => h.Nombre)))}");
+            if (sinModelo) Console.WriteLine($"{T("modelo", "model")}: {T("ninguno", "none")}{(valores.Count != 0 ? "; " + string.Join(", ", valores.Select(v => $"{v.Key} = {Lengua.Comillas(v.Value)}")) : "")}");
+            Console.WriteLine($"{T("idioma", "language")}: {Lengua.Actual}");
+            Console.WriteLine($"{T("carpeta", "folder")}: {carpeta}");
             return 0;
         }
 
@@ -161,21 +180,22 @@ internal static class Hacer
         if (!sinModelo)
         {
             try { backend = PickBackend(args.Get("backend"), args.Get("model")); }
+            // (PickBackend weighs the flags, the environment and the window's Settings: Ajustes.Backend.)
             catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 2; }
         }
         if (escritorio && AbrirEscritorio is null)
         {
-            Console.Error.WriteLine("Esta versión aún no maneja aplicaciones de escritorio.");
+            Console.Error.WriteLine(T("Esta versión aún no maneja aplicaciones de escritorio.", "This version cannot work on desktop applications yet."));
             return 2;
         }
         if (!escritorio && Cli.EnsureBrowser() is { } missing) return missing;
 
         Directory.CreateDirectory(carpeta);
         using var registro = new Registro(Path.Combine(carpeta, "registro.log"));
-        registro.Report($"Objetivo: {goal}");
-        registro.Report($"{(escritorio ? "Aplicación" : "Web")}: {donde}");
+        registro.Report($"{T("Objetivo", "Goal")}: {goal}");
+        registro.Report($"{(escritorio ? T("Aplicación", "Application") : "Web")}: {donde}");
         var fondo = args.Flag("fondo") || !Cli.StdinIsTty();
-        var opciones = new AgentOptions(goal, "es", maxPasos)
+        var opciones = new AgentOptions(goal, Lengua.Actual, maxPasos)
         {
             MaxTiempo = TimeSpan.FromMinutes(maxMinutos),
             Permitidas = permitidas,
@@ -197,7 +217,8 @@ internal static class Hacer
             }
             catch (Exception e) when (e is PlaywrightException or InvalidOperationException or ArgumentException or IOException or TimeoutException)
             {
-                registro.Report($"No se ha podido abrir {(escritorio ? "la aplicación" : "la web")}: {e.Message.Split('\n')[0]}");
+                registro.Report(T($"No se ha podido abrir {(escritorio ? "la aplicación" : "la web")}: {e.Message.Split('\n')[0]}",
+                                  $"Could not open the {(escritorio ? "application" : "website")}: {e.Message.Split('\n')[0]}"));
                 return 1;
             }
             finally { Console.CancelKeyPress -= alCancelar; }
@@ -210,12 +231,12 @@ internal static class Hacer
         File.WriteAllText(Path.Combine(carpeta, "informe.json"), json.ToJsonString(Json.Pretty) + "\n", new UTF8Encoding(false));
         File.WriteAllText(Path.Combine(carpeta, "informe.md"), Encargo.InformeMarkdown(goal, superficie, r), new UTF8Encoding(false));
         var estado = Encargo.Estado(r.Agente);
-        Console.WriteLine($"{estado}: {r.Agente.Resumen}");
+        Console.WriteLine($"{Encargo.EstadoTexto(estado)}: {r.Agente.Resumen}");
         if (r.Agente.Pendiente is { } pendiente && r.Agente.Resumen.Length == 0)
-            Console.WriteLine($"pendiente: {pendiente.Descripcion}");
+            Console.WriteLine($"{T("pendiente", "pending")}: {pendiente.Descripcion}");
         if (r.Agente.Pendiente is { } p)
-            Console.WriteLine($"para hacerlo: repite con --permitir {p.Categoria}");
-        Console.WriteLine($"informe: {Path.Combine(carpeta, "informe.md")}");
+            Console.WriteLine(T($"para hacerlo: repite con --permitir {p.Categoria}", $"to do it: run again with --allow {Guardian.NombreCategoria(p.Categoria)}"));
+        Console.WriteLine($"{T("informe", "report")}: {Path.Combine(carpeta, "informe.md")}");
 
         if (args.Get("aprender") is { } nombre && r.Agente.Ok)
         {
@@ -223,12 +244,12 @@ internal static class Hacer
             {
                 var h = Agente.Habilidades.Aprender(r.Agente.Pasos, nombre, goal, r.Agente.Inicio.Length != 0 ? r.Agente.Inicio : donde, superficie,
                     origen: $"tarea {Path.GetFileName(carpeta)}");
-                Console.WriteLine($"habilidad: {Agente.Habilidades.Guardar(h, Paths.Habilidades)}");
+                Console.WriteLine($"{T("habilidad", "skill")}: {Agente.Habilidades.Guardar(h, Paths.Habilidades)}");
             }
-            catch (ArgumentException e) { Console.Error.WriteLine($"No se ha guardado la habilidad: {e.Message}"); }
+            catch (ArgumentException e) { Console.Error.WriteLine(T($"No se ha guardado la habilidad: {e.Message}", $"The skill was not saved: {e.Message}")); }
         }
         else if (args.Get("aprender") is not null)
-            Console.Error.WriteLine("No se ha guardado la habilidad: la tarea no ha terminado bien.");
+            Console.Error.WriteLine(T("No se ha guardado la habilidad: la tarea no ha terminado bien.", "The skill was not saved: the task did not end well."));
         return estado switch { "hecho" => 0, "pendiente" => Pendiente, _ => 1 };
     }
 
@@ -258,7 +279,7 @@ internal static class Hacer
                 Headless = !ver,
                 ViewportSize = new ViewportSize { Width = 1280, Height = 800 },
                 IgnoreHTTPSErrors = true,
-                Locale = "es-ES",
+                Locale = LocaleNavegador(),
                 Args = ArgumentosNavegador(url),
             }).ConfigureAwait(false);
         }
@@ -278,10 +299,11 @@ internal static class Hacer
         }));
     }
 
-    /// <summary>A person at the console decides: anything but «s»/«si»/«y» is a no.</summary>
+    /// <summary>A person at the console decides: anything but «y»/«yes»/«s»/«sí» is a no, in either language.</summary>
     private static Task<bool> Preguntar(Irreversible accion, CancellationToken ct)
     {
-        Console.Error.Write($"\n⚠ Acción irreversible ({accion.Categoria}): {accion.Descripcion}.\n  ¿La hago? [s/N] ");
+        Console.Error.Write(Lengua.T($"\n⚠ Acción irreversible ({accion.Categoria}): {accion.Descripcion}.\n  ¿La hago? [s/N] ",
+                                     $"\n⚠ Irreversible action ({Guardian.NombreCategoria(accion.Categoria)}): {accion.Descripcion}.\n  Do it? [y/N] "));
         var linea = Console.ReadLine()?.Trim().ToLowerInvariant() ?? "";
         return Task.FromResult(linea is "s" or "si" or "sí" or "y" or "yes");
     }
@@ -299,16 +321,17 @@ internal static class Hacer
         try
         {
             var nueva = Agente.Habilidades.Aprender(r.Agente.Pasos, vieja.Nombre, vieja.Descripcion,
-                vieja.Inicio.Length != 0 ? vieja.Inicio : r.Agente.Inicio, superficie, $"reparada en la tarea del {DateTime.Now:yyyy-MM-dd HH:mm}");
+                vieja.Inicio.Length != 0 ? vieja.Inicio : r.Agente.Inicio, superficie,
+                Lengua.T($"reparada en la tarea del {DateTime.Now:yyyy-MM-dd HH:mm}", $"repaired in the task of {DateTime.Now:yyyy-MM-dd HH:mm}"));
             nueva.Cuando = vieja.Cuando;
             nueva.Descripcion = vieja.Descripcion;
             Agente.Habilidades.Guardar(nueva, Path.GetDirectoryName(vieja.Ruta)!);
             uso.Reparada = true;
-            log.Report($"La habilidad «{vieja.Nombre}» se ha reescrito con los pasos que han funcionado.");
+            log.Report(Lengua.T($"La habilidad «{vieja.Nombre}» se ha reescrito con los pasos que han funcionado.", $"The skill “{vieja.Nombre}” has been rewritten with the steps that worked."));
         }
         catch (Exception e) when (e is ArgumentException or IOException)
         {
-            log.Report($"No he podido reparar la habilidad «{vieja.Nombre}»: {e.Message}");
+            log.Report(Lengua.T($"No he podido reparar la habilidad «{vieja.Nombre}»: {e.Message}", $"Could not repair the skill “{vieja.Nombre}”: {e.Message}"));
         }
     }
 
@@ -334,7 +357,7 @@ internal static class Hacer
                 ["hora"] = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
             };
             File.WriteAllText(pregunta, datos.ToJsonString(Json.Compact), new UTF8Encoding(false));
-            log.Report("Espero tu respuesta en la ventana de faena.");
+            log.Report(Lengua.T("Espero tu respuesta en la ventana de faena.", "Waiting for your answer in the faena window."));
             var limite = DateTime.UtcNow + EsperaRespuesta;
             try
             {
@@ -345,14 +368,14 @@ internal static class Hacer
                         try
                         {
                             var si = Json.Parse(File.ReadAllText(respuesta)) is JsonObject o && o["si"] is JsonValue v && v.TryGetValue<bool>(out var b) && b;
-                            log.Report(si ? "Me has dicho que sí." : "Me has dicho que no.");
+                            log.Report(si ? Lengua.T("Me has dicho que sí.", "You said yes.") : Lengua.T("Me has dicho que no.", "You said no."));
                             return si;
                         }
                         catch (Exception e) when (e is IOException or System.Text.Json.JsonException) { /* half written: read it again */ }
                     }
                     await Task.Delay(300, CancellationToken.None).ConfigureAwait(false);
                 }
-                log.Report("Nadie ha contestado: no lo hago.");
+                log.Report(Lengua.T("Nadie ha contestado: no lo hago.", "Nobody answered: not doing it."));
                 return false;
             }
             finally
@@ -369,13 +392,14 @@ internal static class Hacer
         var avisos = new List<string>();
         AvisarDeTramoya();
         var lista = Agente.Habilidades.Cargar(Paths.Habilidades, avisos);
-        if (lista.Count == 0) Console.WriteLine($"No hay habilidades en {Paths.Habilidades}.");
+        if (lista.Count == 0) Console.WriteLine(Lengua.T($"No hay habilidades en {Paths.Habilidades}.", $"There are no skills in {Paths.Habilidades}."));
         foreach (var h in lista)
         {
             var ps = h.Parametros.Count == 0 ? "" : $" ({string.Join(", ", h.Parametros.Keys)})";
-            Console.WriteLine($"{h.Nombre} [{h.Superficie}, {h.Pasos.Count} {(h.Pasos.Count == 1 ? "paso" : "pasos")}]{ps}: {h.Descripcion}");
+            var sup = h.Superficie == "escritorio" ? Lengua.T("escritorio", "desktop") : h.Superficie;
+            Console.WriteLine($"{h.Nombre} [{sup}, {h.Pasos.Count} {(h.Pasos.Count == 1 ? Lengua.T("paso", "step") : Lengua.T("pasos", "steps"))}]{ps}: {h.Descripcion}");
         }
-        foreach (var a in avisos) Console.Error.WriteLine($"Aviso: habilidad ilegible: {a}");
+        foreach (var a in avisos) Console.Error.WriteLine(Lengua.T($"Aviso: habilidad ilegible: {a}", $"Warning: unreadable skill: {a}"));
         return 0;
     }
 
@@ -383,7 +407,7 @@ internal static class Hacer
     {
         var nombre = args.GetRequired("nombre");
         var h = Agente.Habilidades.Cargar(Paths.Habilidades).FirstOrDefault(x => string.Equals(x.Nombre, nombre, StringComparison.OrdinalIgnoreCase));
-        if (h is null) { Console.Error.WriteLine($"No hay ninguna habilidad «{nombre}» en {Paths.Habilidades}."); return 1; }
+        if (h is null) { Console.Error.WriteLine(Lengua.T($"No hay ninguna habilidad «{nombre}» en {Paths.Habilidades}.", $"There is no skill “{nombre}” in {Paths.Habilidades}.")); return 1; }
         Console.Write(File.ReadAllText(h.Ruta));
         return 0;
     }
@@ -396,7 +420,7 @@ internal static class Hacer
         try { (datos, tipoOrigen) = LeerOrigen(origen); }
         catch (Exception e) when (e is IOException or ArgumentException or System.Text.Json.JsonException or UnauthorizedAccessException)
         {
-            Console.Error.WriteLine($"No puedo leer {origen}: {e.Message}");
+            Console.Error.WriteLine(Lengua.T($"No puedo leer {origen}: {e.Message}", $"Cannot read {origen}: {e.Message}"));
             return 2;
         }
         var pasos = datos["pasos"] is JsonArray arr ? arr.OfType<JsonObject>().ToList() : [];
@@ -411,10 +435,11 @@ internal static class Hacer
         var destino = Path.Combine(Paths.Habilidades, Agente.Habilidades.Slug(h.Nombre) + ".toml");
         if (File.Exists(destino) && !args.Flag("force"))
         {
-            Console.Error.WriteLine($"Ya existe {destino}; usa --force para sustituirla.");
+            Console.Error.WriteLine(Lengua.T($"Ya existe {destino}; usa --force para sustituirla.", $"{destino} already exists; use --force to replace it."));
             return 2;
         }
-        Console.WriteLine($"habilidad {h.Nombre}: {h.Pasos.Count} pasos, parámetros: {(h.Parametros.Count == 0 ? "ninguno" : string.Join(", ", h.Parametros.Select(p => $"{p.Key} = «{p.Value}»")))}");
+        Console.WriteLine(Lengua.T($"habilidad {h.Nombre}: {h.Pasos.Count} pasos, parámetros: ", $"skill {h.Nombre}: {h.Pasos.Count} steps, parameters: ")
+                          + (h.Parametros.Count == 0 ? Lengua.T("ninguno", "none") : string.Join(", ", h.Parametros.Select(p => $"{p.Key} = {Lengua.Comillas(p.Value)}"))));
         Console.WriteLine(Agente.Habilidades.Guardar(h, Paths.Habilidades));
         return 0;
     }
@@ -430,8 +455,8 @@ internal static class Hacer
             return null;
         }
         var archivo = Archivo(origen) ?? Archivo(Path.Combine(Paths.Tareas, origen)) ?? Archivo(Path.Combine(Paths.ProyectosTramoya, origen))
-                      ?? throw new FileNotFoundException("no es una tarea (informe.json) ni un proyecto de tramoya (proyecto.json)");
-        var datos = Json.Parse(File.ReadAllText(archivo)) as JsonObject ?? throw new ArgumentException("no es un objeto JSON");
+                      ?? throw new FileNotFoundException(Lengua.T("no es una tarea (informe.json) ni un proyecto de tramoya (proyecto.json)", "it is neither a task (informe.json) nor a tramoya project (proyecto.json)"));
+        var datos = Json.Parse(File.ReadAllText(archivo)) as JsonObject ?? throw new ArgumentException(Lengua.T("no es un objeto JSON", "it is not a JSON object"));
         return (datos, Path.GetFileName(archivo) == "informe.json" ? "tarea" : "proyecto");
     }
 
@@ -443,17 +468,18 @@ internal static class Hacer
     {
         if (Directory.Exists(Paths.HabilidadesTramoya) && Directory.EnumerateFiles(Paths.HabilidadesTramoya, "*.toml").Any()
             && (!Directory.Exists(Paths.Habilidades) || !Directory.EnumerateFiles(Paths.Habilidades, "*.toml").Any()))
-            Console.Error.WriteLine($"Aviso: hay habilidades de tramoya en {Paths.HabilidadesTramoya}; tráelas con `faena habilidades importar`.");
+            Console.Error.WriteLine(Lengua.T($"Aviso: hay habilidades de tramoya en {Paths.HabilidadesTramoya}; tráelas con `faena habilidades importar`.",
+                                             $"Warning: there are tramoya skills in {Paths.HabilidadesTramoya}; bring them over with `faena skills import`."));
     }
 
     private static int CmdImportar(ParsedArgs args)
     {
         var origen = args.Get("carpeta") is { } c ? Path.GetFullPath(c) : Paths.HabilidadesTramoya;
-        if (!Directory.Exists(origen)) { Console.Error.WriteLine($"No existe {origen}."); return 2; }
+        if (!Directory.Exists(origen)) { Console.Error.WriteLine(Lengua.T($"No existe {origen}.", $"{origen} does not exist.")); return 2; }
         var avisos = new List<string>();
         var lista = Agente.Habilidades.Cargar(origen, avisos);
-        foreach (var a in avisos) Console.Error.WriteLine($"Aviso: habilidad ilegible: {a}");
-        if (lista.Count == 0) { Console.WriteLine($"No hay habilidades en {origen}."); return 0; }
+        foreach (var a in avisos) Console.Error.WriteLine(Lengua.T($"Aviso: habilidad ilegible: {a}", $"Warning: unreadable skill: {a}"));
+        if (lista.Count == 0) { Console.WriteLine(Lengua.T($"No hay habilidades en {origen}.", $"There are no skills in {origen}.")); return 0; }
         Directory.CreateDirectory(Paths.Habilidades);
         var traidas = 0;
         foreach (var h in lista)
@@ -461,14 +487,15 @@ internal static class Hacer
             var destino = Path.Combine(Paths.Habilidades, Path.GetFileName(h.Ruta));
             if (File.Exists(destino) && !args.Flag("force"))
             {
-                Console.WriteLine($"{h.Nombre}: ya está (usa --force para sustituirla)");
+                Console.WriteLine(Lengua.T($"{h.Nombre}: ya está (usa --force para sustituirla)", $"{h.Nombre}: already there (use --force to replace it)"));
                 continue;
             }
             File.Copy(h.Ruta, destino, overwrite: true);
             Console.WriteLine($"{h.Nombre}: {destino}");
             traidas++;
         }
-        Console.WriteLine($"{traidas} {(traidas == 1 ? "habilidad traída" : "habilidades traídas")} a {Paths.Habilidades}");
+        Console.WriteLine(Lengua.T($"{traidas} {(traidas == 1 ? "habilidad traída" : "habilidades traídas")} a {Paths.Habilidades}",
+                                   $"{traidas} {(traidas == 1 ? "skill" : "skills")} brought to {Paths.Habilidades}"));
         return 0;
     }
 
@@ -476,7 +503,8 @@ internal static class Hacer
 
     /// <summary>
     /// Integrated Windows sign-in (Kerberos/NTLM) for the web, its domain and Microsoft's, which
-    /// many company webs go through; no translate bar; Spanish. As tramoya opens its webs.
+    /// many company webs go through; no translate bar; the interface's language (FAENA_BROWSER_LANG
+    /// overrides it, for webs that must be seen in another one). As tramoya opens its webs.
     /// </summary>
     internal static List<string> ArgumentosNavegador(string url)
     {
@@ -486,11 +514,15 @@ internal static class Hacer
         var trozos = host.Split('.');
         if (trozos.Length > 2 && !host.Replace(".", "").All(char.IsAsciiDigit)) dominios.Add("*." + string.Join(".", trozos[^2..]));
         dominios.AddRange(["*.microsoftonline.com", "*.windows.net"]);
-        var lista = new List<string> { $"--auth-server-allowlist={string.Join(",", dominios)}", "--disable-features=Translate", "--lang=es-ES" };
+        var lista = new List<string> { $"--auth-server-allowlist={string.Join(",", dominios)}", "--disable-features=Translate", $"--lang={LocaleNavegador()}" };
         // FAENA_CDP: a debugging port, so a test can watch the browser of a real job.
         if (Environment.GetEnvironmentVariable("FAENA_CDP") is { Length: > 0 } cdp) lista.Add($"--remote-debugging-port={cdp}");
         return lista;
     }
+
+    /// <summary>The browser's locale: FAENA_BROWSER_LANG (es-ES, en-US…), else that of the interface's language.</summary>
+    internal static string LocaleNavegador() =>
+        Environment.GetEnvironmentVariable("FAENA_BROWSER_LANG") is { Length: > 0 } l ? l.Trim() : Lengua.T("es-ES", "en-US");
 
     private static string Recortar(string s, int n) => s.Length <= n ? s : s[..n].TrimEnd('-');
 

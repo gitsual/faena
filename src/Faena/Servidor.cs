@@ -29,6 +29,9 @@ public sealed class Opciones
 
     /// <summary>Si la interfaz puede ofrecer lo que solo tiene sentido en Windows (abrir una carpeta en el explorador).</summary>
     public bool Windows { get; init; } = true;
+
+    /// <summary>The Settings file (language and AI); <see cref="Paths.Ajustes"/> unless a test says otherwise.</summary>
+    public string ArchivoAjustes { get; init; } = Paths.Ajustes;
 }
 
 /// <summary>
@@ -197,17 +200,60 @@ public sealed class Servidor : IDisposable
     private static void AbrirArchivo(string ruta) =>
         Process.Start(new ProcessStartInfo(ruta) { UseShellExecute = true });
 
-    /// <summary>Si hay un modelo a mano: Claude con clave, o un Ollama que contesta (se pregunta por /api/version, que es instantáneo).</summary>
-    private static bool HayModelo()
+    /// <summary>
+    /// Whether there is a model at hand with the current settings: Claude or an OpenAI-compatible
+    /// server that is configured, or an Ollama that answers (asked at /api/version, which is instant).
+    /// </summary>
+    private bool HayModelo()
     {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"))) return true;
         try
         {
+            var b = Ajustes.Backend(null, null, Ajustes.Leer(_o.ArchivoAjustes));
+            if (b is not OllamaChatBackend o) return true;
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(1.5) };
-            var url = Backends.UrlOllama(Environment.GetEnvironmentVariable("OLLAMA_HOST")) + "/api/version";
-            return http.GetAsync(url).GetAwaiter().GetResult().IsSuccessStatusCode;
+            return http.GetAsync(o.BaseUrl + "/api/version").GetAwaiter().GetResult().IsSuccessStatusCode;
         }
         catch (Exception) { return false; }
+    }
+
+    /// <summary>The draft of the Settings screen, not saved yet; an empty key means the saved one (when the backend is the same).</summary>
+    private JsonObject Borrador(JsonObject cuerpo)
+    {
+        var guardados = Ajustes.Leer(_o.ArchivoAjustes);
+        var b = new JsonObject();
+        foreach (var k in new[] { Ajustes.KBackend, Ajustes.KModelo, Ajustes.KUrl, Ajustes.KClave })
+            b[k] = Ajustes.Str(cuerpo, k);
+        if (Ajustes.Str(b, Ajustes.KClave).Length == 0 && Ajustes.Str(b, Ajustes.KBackend) == Ajustes.Str(guardados, Ajustes.KBackend))
+            b[Ajustes.KClave] = Ajustes.Str(guardados, Ajustes.KClave);
+        return b;
+    }
+
+    /// <summary>A GET that returns JSON (the model lists), with an optional bearer or Anthropic key.</summary>
+    internal static Func<string, IDictionary<string, string>, JsonNode?> GetJson { get; set; } = (url, headers) =>
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        foreach (var (k, v) in headers) req.Headers.TryAddWithoutValidation(k, v);
+        using var r = http.Send(req);
+        var texto = r.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        if (!r.IsSuccessStatusCode) throw new InvalidOperationException($"{url}: {(int)r.StatusCode} {Observer.Recortar(texto, 200)}");
+        return JsonNode.Parse(texto);
+    };
+
+    /// <summary>The models the chosen server offers (Ollama's /api/tags, the OpenAI /models, Anthropic's /v1/models).</summary>
+    private static List<string> Modelos(IChatBackend b)
+    {
+        var lista = new List<string>();
+        JsonNode? r = b switch
+        {
+            OllamaChatBackend o => GetJson(o.BaseUrl + "/api/tags", new Dictionary<string, string>()),
+            OpenAiChatBackend a => GetJson(a.BaseUrl + "/models", a.ApiKey is { } k ? new Dictionary<string, string> { ["Authorization"] = "Bearer " + k } : new Dictionary<string, string>()),
+            ClaudeChatBackend c => GetJson("https://api.anthropic.com/v1/models", new Dictionary<string, string> { ["x-api-key"] = c.ApiKey, ["anthropic-version"] = "2023-06-01" }),
+            _ => null,
+        };
+        if (r?["models"] is JsonArray ms) lista.AddRange(ms.Select(m => m?["name"]?.ToString() ?? m?["model"]?.ToString() ?? "").Where(s => s.Length != 0));
+        if (r?["data"] is JsonArray ds) lista.AddRange(ds.Select(m => m?["id"]?.ToString() ?? "").Where(s => s.Length != 0));
+        return lista.Distinct().Order(StringComparer.Ordinal).ToList();
     }
 
     // --- GET ---------------------------------------------------------------------------
@@ -227,11 +273,18 @@ public sealed class Servidor : IDisposable
         }
         if (ruta == "/api/inicio")
         {
+            var ajustes = Ajustes.Leer(_o.ArchivoAjustes);
+            string ia;
+            try { var (b, m, u) = Ajustes.Describir(Ajustes.Backend(null, null, ajustes)); ia = $"{b} · {m}{(u.Length != 0 ? " · " + u : "")}"; }
+            catch (ArgumentException ex) { ia = ex.Message; }
             Responder(ctx, new JsonObject
             {
                 ["version"] = Cli.Version(),
                 ["windows"] = _o.Windows,
                 ["modelo"] = HayModelo(),
+                ["ia"] = ia,
+                ["idioma"] = Lengua.Actual,
+                ["ajustes"] = Ajustes.Publicos(ajustes),
                 ["tareas"] = _o.CarpetaTareas,
                 ["habilidades"] = _o.CarpetaHabilidades,
             });
@@ -250,7 +303,7 @@ public sealed class Servidor : IDisposable
         if (RutaEncargo.Match(ruta) is { Success: true } e)
         {
             if (Encargos.Detalle(_o, e.Groups[1].Value) is { } detalle) Responder(ctx, detalle);
-            else Responder(ctx, new JsonObject { ["error"] = "no existe" }, 404);
+            else Responder(ctx, new JsonObject { ["error"] = Lengua.T("no existe", "not found") }, 404);
             return;
         }
         if (RutaCaptura.Match(ruta) is { Success: true } c)
@@ -285,6 +338,52 @@ public sealed class Servidor : IDisposable
     {
         var cuerpo = Cuerpo(ctx);
         var ruta = ctx.Request.Url?.AbsolutePath ?? "/";
+        if (ruta == "/api/ajustes")
+        {
+            // Saved for every faena that starts from now on; the window switches language at once.
+            try
+            {
+                var guardados = Ajustes.Guardar(cuerpo, _o.ArchivoAjustes);
+                if (Ajustes.Str(guardados, Ajustes.KIdioma) is { Length: > 0 } idioma && Environment.GetEnvironmentVariable(Lengua.Variable) is not { Length: > 0 })
+                    Lengua.Actual = idioma;
+                Responder(ctx, Ajustes.Publicos(guardados));
+            }
+            catch (ArgumentException e) { Responder(ctx, new JsonObject { ["error"] = e.Message }, 400); }
+            return;
+        }
+        if (ruta is "/api/ia/modelos" or "/api/ia/probar")
+        {
+            try
+            {
+                var borrador = Borrador(cuerpo);
+                // Only the draft counts here, not the environment of the window: it is what will be saved.
+                var b = Backends.Pick(Ajustes.Str(borrador, Ajustes.KBackend) is { Length: > 0 } x ? x : null, null,
+                    Ajustes.EntornoIa(null, borrador, new Dictionary<string, string>()));
+                var (nombre, modelo, url) = Ajustes.Describir(b);
+                if (ruta == "/api/ia/modelos")
+                {
+                    Responder(ctx, new JsonObject
+                    {
+                        ["backend"] = nombre, ["modelo"] = modelo, ["url"] = url,
+                        ["modelos"] = new JsonArray(Modelos(b).Select(m => (JsonNode?)m).ToArray()),
+                    });
+                    return;
+                }
+                var reloj = Stopwatch.StartNew();
+                using var tope = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+                var respuesta = b.CompleteAsync("You answer only with JSON.", [new ChatMessage("user", "Answer with {\"ok\": true}.")], tope.Token).GetAwaiter().GetResult();
+                Responder(ctx, new JsonObject
+                {
+                    ["ok"] = true, ["backend"] = nombre, ["modelo"] = modelo, ["url"] = url,
+                    ["ms"] = reloj.ElapsedMilliseconds, ["respuesta"] = Observer.Recortar(Protocol.QuitarThink(respuesta), 80),
+                });
+            }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or HttpRequestException or TaskCanceledException or OperationCanceledException or System.Text.Json.JsonException)
+            {
+                Responder(ctx, new JsonObject { ["ok"] = false, ["error"] = e.Message.Split('\n')[0] });
+            }
+            return;
+        }
         if (ruta == "/api/encargar")
         {
             try { Responder(ctx, new JsonObject { ["id"] = Encargos.Encargar(_o, cuerpo) }); }
@@ -317,7 +416,7 @@ public sealed class Servidor : IDisposable
         var (id, accion) = (m.Groups[1].Value, m.Groups[2].Value);
         if (Encargos.CarpetaDe(_o, id) is not { } carpeta)
         {
-            Responder(ctx, new JsonObject { ["error"] = "no existe" }, 404);
+            Responder(ctx, new JsonObject { ["error"] = Lengua.T("no existe", "not found") }, 404);
             return;
         }
         switch (accion)
@@ -339,7 +438,7 @@ public sealed class Servidor : IDisposable
                 catch (ArgumentException e) { Responder(ctx, new JsonObject { ["error"] = e.Message }, 400); }
                 return;
             default:
-                Responder(ctx, new JsonObject { ["error"] = "acción desconocida" }, 400);
+                Responder(ctx, new JsonObject { ["error"] = Lengua.T("acción desconocida", "unknown action") }, 400);
                 return;
         }
         Responder(ctx, new JsonObject { ["ok"] = true });

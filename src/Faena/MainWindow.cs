@@ -2,6 +2,7 @@
 // its own user-data dir). Closing it ends the program and Program stops the server and the
 // jobs; nothing else lives in this class.
 using System.Diagnostics;
+using Faena.Agente;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -39,8 +40,10 @@ internal sealed class MainWindow : Form
         {
             // Windows 11 ships the runtime; this is for older or trimmed installs.
             var respuesta = MessageBox.Show(this,
-                "Faena necesita el componente «WebView2» de Microsoft Edge y no está instalado "
-                + "en este equipo.\n\n¿Quieres abrir la página de descarga de Microsoft?",
+                Lengua.T("Faena necesita el componente «WebView2» de Microsoft Edge y no está instalado "
+                         + "en este equipo.\n\n¿Quieres abrir la página de descarga de Microsoft?",
+                         "Faena needs Microsoft Edge's “WebView2” component and it is not installed "
+                         + "on this computer.\n\nOpen Microsoft's download page?"),
                 "Faena", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (respuesta == DialogResult.Yes)
                 AbrirFuera(WebView2Download);
@@ -48,7 +51,7 @@ internal sealed class MainWindow : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "No he podido abrir la ventana de faena.\n\n" + ex.Message,
+            MessageBox.Show(this, Lengua.T("No he podido abrir la ventana de faena.\n\n", "Could not open faena's window.\n\n") + ex.Message,
                 "Faena", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Close();
         }

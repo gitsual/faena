@@ -17,6 +17,7 @@ public sealed class EncargosTests : IDisposable
     private readonly Func<Process, bool> _vive = Encargos.Vive;
     private readonly Func<DateTime> _ahora = Encargos.Ahora;
     private ProcessStartInfo? _lanzado;
+    private readonly Idioma _idioma = new("es");
 
     public EncargosTests()
     {
@@ -40,6 +41,7 @@ public sealed class EncargosTests : IDisposable
 
     public void Dispose()
     {
+        _idioma.Dispose();
         Encargos.Lanzador = _lanzador;
         Encargos.Vive = _vive;
         Encargos.Ahora = _ahora;
@@ -111,10 +113,10 @@ public sealed class EncargosTests : IDisposable
     }
 
     [Theory]
-    [InlineData("{}", "Cuéntale")]
-    [InlineData("{\"objetivo\":\"x\"}", "Dile dónde")]
+    [InlineData("{}", "Dígame qué hay que hacer")]
+    [InlineData("{\"objetivo\":\"x\"}", "Dígame dónde")]
     [InlineData("{\"objetivo\":\"x\",\"url\":\"a.test\",\"app\":\"b.exe\"}", "no los dos")]
-    [InlineData("{\"objetivo\":\"x\",\"url\":\"a.test\",\"sin_modelo\":true}", "repertorio")]
+    [InlineData("{\"objetivo\":\"x\",\"url\":\"a.test\",\"sin_modelo\":true}", "elegir un oficio")]
     public void EncargarExplicaLoQueFalta(string pedido, string motivo) =>
         Assert.Contains(motivo, Assert.Throws<ArgumentException>(() => Encargos.Encargar(_o, (JsonObject)JsonNode.Parse(pedido)!)).Message);
 
@@ -218,7 +220,7 @@ public sealed class EncargosTests : IDisposable
         const string pasos = """[{"tipo":"clic","selector":"#nueva","desc":"Pulsa el botón «New note»"},{"tipo":"escribir","selector":"#t","valor":"Pan","desc":"Escribe «Pan» en el campo «Title»"}]""";
         CarpetaFalsa("2026-10-28-190000-envia-el-aviso", $$"""{"estado":"hecho","objetivo":"Crea la nota «Pan»","inicio":"http://n.test/","superficie":"web","pasos":{{pasos}}}""");
         Assert.Equal("crear-nota", Encargos.AprenderDeEncargo(_o, "2026-10-28-190000-envia-el-aviso", "Crear nota"));
-        Assert.Contains("Ya hay una obra", Assert.Throws<ArgumentException>(() => Encargos.AprenderDeEncargo(_o, "2026-10-28-190000-envia-el-aviso", "crear-nota")).Message);
+        Assert.Contains("Ya sé un oficio", Assert.Throws<ArgumentException>(() => Encargos.AprenderDeEncargo(_o, "2026-10-28-190000-envia-el-aviso", "crear-nota")).Message);
 
         // Un proyecto de tramoya: su carpeta con proyecto.json, buscada por id o por ruta.
         var pid = "alta-de-cliente";

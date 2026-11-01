@@ -15,6 +15,7 @@ public sealed class ServidorTests : IDisposable
     private readonly HttpClient _http = new();
     private readonly Func<ProcessStartInfo, Process?> _lanzador = Encargos.Lanzador;
     private ProcessStartInfo? _lanzado;
+    private readonly Idioma _idioma = new("es");
 
     public ServidorTests()
     {
@@ -35,6 +36,7 @@ public sealed class ServidorTests : IDisposable
 
     public void Dispose()
     {
+        _idioma.Dispose();
         _servidor.Stop();
         _http.Dispose();
         Encargos.Lanzador = _lanzador;
@@ -71,7 +73,7 @@ public sealed class ServidorTests : IDisposable
     {
         var (code, mal) = await Post("/api/encargar", new JsonObject { ["objetivo"] = "x" });
         Assert.Equal(400, code);
-        Assert.Contains("Dile dónde", mal!["error"]!.ToString());
+        Assert.Contains("Dígame dónde", mal!["error"]!.ToString());
 
         var (ok, datos) = await Post("/api/encargar", new JsonObject { ["objetivo"] = "Crea la nota «Pan»", ["url"] = "http://n.test/" });
         Assert.Equal(200, ok);
