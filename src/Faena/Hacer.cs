@@ -57,7 +57,7 @@ internal static class Hacer
         p.AddAppend("--param", help: "con --sin-modelo: nombre=valor de un parámetro de la habilidad; repetible");
         p.Add("--aprender", help: "si sale bien, guardar lo hecho como habilidad con este nombre");
         p.Add("--carpeta", help: "dónde dejar el log y el informe (por defecto, una carpeta nueva en tareas)");
-        p.Add("--backend", choices: new[] { "ollama", "claude" });
+        p.Add("--backend", choices: new[] { "ollama", "claude", "openai" });
         p.Add("--model");
         p.AddSwitch("--no-reparar", help: "si un paso de la habilidad falla y el modelo termina la tarea, no reescribir la habilidad");
         p.AddSwitch("--dry-run", help: "muestra lo que haría sin abrir nada ni llamar al modelo");

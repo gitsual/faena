@@ -168,7 +168,10 @@ public static class Protocol
     }
 
     private static readonly Regex Think = new("<think>.*?</think>", RegexOptions.Singleline | RegexOptions.Compiled);
-    private static readonly Regex Fence = new("```(?:json)?\\s*(.*?)```", RegexOptions.Singleline | RegexOptions.Compiled);
+    /// <summary>The text without the <c>&lt;think&gt;</c> reasoning some models prepend (the same regex <see cref="ParseDecision"/> uses).</summary>
+    public static string QuitarThink(string? texto) => Think.Replace(texto ?? "", "").Trim();
+
+    private static readonly Regex Fence =new("```(?:json)?\\s*(.*?)```", RegexOptions.Singleline | RegexOptions.Compiled);
 
     /// <summary>
     /// Lee la decisión del texto que devuelve el modelo: tolera vallas <c>```json</c>, texto

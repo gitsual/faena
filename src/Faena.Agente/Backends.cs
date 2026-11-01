@@ -119,8 +119,96 @@ public sealed class ClaudeChatBackend : IChatBackend
     }
 }
 
+/// <summary>
+/// Any server that speaks the OpenAI chat completions API (llama-server, vLLM, LiteLLM, LM Studio...),
+/// asked for a JSON object. Screenshots go as <c>image_url</c> data URIs only when <c>vision</c> is on
+/// (<c>FAENA_LLM_VISION=1</c>): a text-only model behind such a server would reject them.
+/// </summary>
+public sealed class OpenAiChatBackend : IChatBackend
+{
+    public string Model { get; }
+    public string BaseUrl { get; }
+    public string? ApiKey { get; }
+    public bool Vision { get; }
+    private readonly PostJsonAsync _post;
+    // Once the server has said it does not know response_format, stop sending it.
+    private bool _sinFormato;
+
+    public OpenAiChatBackend(string baseUrl, string model = Backends.DefaultOpenAiModel, string? apiKey = null, bool vision = false, PostJsonAsync? post = null)
+    {
+        BaseUrl = baseUrl.Trim().TrimEnd('/');
+        Model = model;
+        ApiKey = string.IsNullOrEmpty(apiKey) ? null : apiKey;
+        Vision = vision;
+        _post = post ?? Backends.HttpPostAsync;
+    }
+
+    public async Task<string> CompleteAsync(string system, IReadOnlyList<ChatMessage> messages, CancellationToken ct)
+    {
+        var url = $"{BaseUrl}/chat/completions";
+        var headers = new Dictionary<string, string>();
+        if (ApiKey is not null) headers["Authorization"] = $"Bearer {ApiKey}";
+        JsonNode reply;
+        try
+        {
+            reply = await _post(url, Payload(system, messages, !_sinFormato), headers, ct).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e) when (!_sinFormato && RechazaFormato(e.Message))
+        {
+            _sinFormato = true;
+            reply = await _post(url, Payload(system, messages, false), headers, ct).ConfigureAwait(false);
+        }
+        if (reply is JsonObject o && o["error"] is JsonNode error)
+            throw new InvalidOperationException($"OpenAI: {(error is JsonObject eo ? eo["message"] ?? error : error)}");
+        var content = reply?["choices"]?[0]?["message"]?["content"];
+        if (content is null) throw new InvalidOperationException("el servidor no ha devuelto choices[0].message.content");
+        return Protocol.QuitarThink(content.GetValueKind() == System.Text.Json.JsonValueKind.String ? content.GetValue<string>() : content.ToJsonString());
+    }
+
+    /// <summary>A 400/422 whose body names response_format: the server does not support it.</summary>
+    internal static bool RechazaFormato(string mensaje) =>
+        mensaje.Contains("response_format", StringComparison.OrdinalIgnoreCase)
+        && (mensaje.Contains(" 400", StringComparison.Ordinal) || mensaje.Contains(" 422", StringComparison.Ordinal));
+
+    internal JsonObject Payload(string system, IReadOnlyList<ChatMessage> messages, bool formato)
+    {
+        var lista = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = system } };
+        foreach (var m in messages)
+        {
+            if (m.ImagePng is null || !Vision)
+            {
+                lista.Add(new JsonObject { ["role"] = m.Role, ["content"] = m.Text });
+                continue;
+            }
+            lista.Add(new JsonObject
+            {
+                ["role"] = m.Role,
+                ["content"] = new JsonArray
+                {
+                    new JsonObject { ["type"] = "text", ["text"] = m.Text },
+                    new JsonObject
+                    {
+                        ["type"] = "image_url",
+                        ["image_url"] = new JsonObject { ["url"] = "data:image/png;base64," + Convert.ToBase64String(m.ImagePng) },
+                    },
+                },
+            });
+        }
+        var payload = new JsonObject
+        {
+            ["model"] = Model,
+            ["messages"] = lista,
+            ["temperature"] = 0.1,
+            ["max_tokens"] = 1024,
+        };
+        if (formato) payload["response_format"] = new JsonObject { ["type"] = "json_object" };
+        return payload;
+    }
+}
+
 public static class Backends
 {
+    public const string DefaultOpenAiModel = "default";
     public const string DefaultOllamaModel = "qwen3-coder:30b";
     public const string DefaultOllamaUrl = "http://localhost:11434";
     public const string DefaultClaudeModel = "claude-sonnet-5-5";
@@ -183,8 +271,12 @@ public static class Backends
                 return new ClaudeChatBackend(key, model ?? DefaultClaudeModel);
             case "ollama":
                 return new OllamaChatBackend(model ?? DefaultOllamaModel, UrlOllama(Get("OLLAMA_HOST")));
+            case "openai":
+                // Any OpenAI-compatible server: its base url (…/v1) is required, the key is optional.
+                var baseUrl = Get("FAENA_LLM_URL") ?? throw new ArgumentException("el backend openai necesita FAENA_LLM_URL en el entorno (p. ej. http://llm:8080/v1)");
+                return new OpenAiChatBackend(baseUrl, model ?? DefaultOpenAiModel, Get("FAENA_LLM_KEY"), Get("FAENA_LLM_VISION") == "1");
             default:
-                throw new ArgumentException($"backend desconocido «{chosen}»: usa ollama o claude");
+                throw new ArgumentException($"backend desconocido «{chosen}»: usa ollama, claude u openai");
         }
     }
 }
