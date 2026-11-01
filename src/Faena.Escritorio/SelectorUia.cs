@@ -23,7 +23,7 @@ public sealed record SelectorUia(string Tipo, string? Id = null, string? Nombre 
     public static SelectorUia Parse(string selector)
     {
         var m = Forma.Match((selector ?? "").Trim());
-        if (!m.Success) throw new ArgumentException($"selector de escritorio inválido «{selector}»: se espera uia=Tipo[id=\"…\"] o uia=Tipo[name=\"…\"]");
+        if (!m.Success) throw new ArgumentException($"invalid desktop selector “{selector}”: expected uia=Type[id=\"…\"] or uia=Type[name=\"…\"]");
         var s = new SelectorUia(m.Groups["tipo"].Value);
         foreach (Match a in Attr.Matches(m.Groups["attrs"].Value))
         {
@@ -33,11 +33,11 @@ public sealed record SelectorUia(string Tipo, string? Id = null, string? Nombre 
                 "id" => s with { Id = v },
                 "name" => s with { Nombre = v },
                 "ventana" => s with { Ventana = v },
-                "n" => s with { N = int.TryParse(v, out var n) && n > 0 ? n : throw new ArgumentException($"«n» debe ser un número positivo en «{selector}»") },
-                var k => throw new ArgumentException($"clave desconocida «{k}» en «{selector}»: usa id, name, ventana o n"),
+                "n" => s with { N = int.TryParse(v, out var n) && n > 0 ? n : throw new ArgumentException($"“n” must be a positive number in “{selector}”") },
+                var k => throw new ArgumentException($"unknown key “{k}” in “{selector}”: use id, name, ventana or n"),
             };
         }
-        if (s.Id is null && s.Nombre is null) throw new ArgumentException($"el selector «{selector}» necesita id o name");
+        if (s.Id is null && s.Nombre is null) throw new ArgumentException($"the selector “{selector}” needs id or name");
         return s;
     }
 

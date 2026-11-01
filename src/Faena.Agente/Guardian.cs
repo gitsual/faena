@@ -8,6 +8,11 @@ namespace Faena.Agente;
 /// modelo lo ha marcado con <c>"irreversible": true</c>; las dos cosas, porque un modelo pequeño
 /// se olvida a veces y un nombre como «Continuar» puede esconder un pago.
 /// </summary>
+/// <remarks>
+/// The words below are Spanish AND English and are always all of them: what is irreversible does
+/// not depend on the language of faena's interface, but on the language of the web or program it
+/// is working on. Only the descriptions it writes for the person follow <see cref="Lengua"/>.
+/// </remarks>
 public static class Guardian
 {
     /// <summary>Cada categoría con las palabras que la delatan (palabras enteras del nombre).</summary>
@@ -18,6 +23,25 @@ public static class Guardian
         ["pagar"] = ["pagar", "comprar", "tramitar", "realizar pedido", "finalizar compra", "pay", "buy", "checkout", "place order"],
         ["aceptar"] = ["aceptar", "confirmar", "aprobar", "firmar", "validar", "autorizar", "imputar", "transferir", "accept", "confirm", "approve", "sign", "authorize", "transfer"],
     };
+
+    /// <summary>The English name of each category, accepted by <c>--allow</c> as well («send» = «enviar»).</summary>
+    public static readonly IReadOnlyDictionary<string, string> CategoriasEn = new Dictionary<string, string>
+    {
+        ["enviar"] = "send", ["borrar"] = "delete", ["pagar"] = "pay", ["aceptar"] = "accept",
+    };
+
+    /// <summary>The category as it is said in the interface's language.</summary>
+    public static string NombreCategoria(string categoria, string? lang = null) =>
+        Lengua.T(categoria, CategoriasEn.GetValueOrDefault(categoria, categoria), lang);
+
+    /// <summary>A category named in either language («send», «Enviar», «*») as faena keeps it («enviar»); null if it is not one.</summary>
+    public static string? CategoriaDe(string nombre)
+    {
+        var n = (nombre ?? "").Trim().ToLowerInvariant();
+        if (n is "*" or "irreversible") return n;
+        if (Categorias.ContainsKey(n)) return n;
+        return CategoriasEn.FirstOrDefault(c => c.Value == n).Key;
+    }
 
     private static readonly (string Categoria, Regex Patron)[] Patrones = Categorias
         .Select(c => (c.Key, new Regex(@"(?<!\p{L})(" + string.Join("|", c.Value.Select(Regex.Escape)) + @")(?!\p{L})",RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)))
@@ -42,18 +66,18 @@ public static class Guardian
         switch (d.Accion)
         {
             case "clic" when el is not null:
-                descripcion = $"Pulsar {el.Tipo}{(el.Nombre.Length != 0 ? $" «{el.Nombre}»" : "")}";
+                descripcion = Lengua.T($"Pulsar {Lengua.Cosa(el.Tipo, el.Nombre, "es")}", $"Click {Lengua.Cosa(el.Tipo, el.Nombre, "en")}");
                 categoria = Categoria(el.Nombre);
                 break;
             case "elegir" when el is not null:
-                descripcion = $"Elegir «{d.Valor}» en {el.Tipo}{(el.Nombre.Length != 0 ? $" «{el.Nombre}»" : "")}";
+                descripcion = Lengua.T($"Elegir «{d.Valor}» en {Lengua.Cosa(el.Tipo, el.Nombre, "es")}", $"Choose “{d.Valor}” in {Lengua.Cosa(el.Tipo, el.Nombre, "en")}");
                 break;
             case "tecla":
-                descripcion = $"Pulsar la tecla {Palabras.Tecla(d.Valor)}";
+                descripcion = Lengua.T($"Pulsar la tecla {Lengua.NombreTecla(Palabras.Tecla(d.Valor), "es")}", $"Press {Lengua.NombreTecla(Palabras.Tecla(d.Valor), "en")}");
                 break;
             case "escribir" when el is not null:
                 // Escribir no envía nada por sí solo; solo cuenta si el modelo dice que sí.
-                descripcion = $"Escribir «{d.Valor}» en {el.Tipo}{(el.Nombre.Length != 0 ? $" «{el.Nombre}»" : "")}";
+                descripcion = Lengua.T($"Escribir «{d.Valor}» en {Lengua.Cosa(el.Tipo, el.Nombre, "es")}", $"Type “{d.Valor}” in {Lengua.Cosa(el.Tipo, el.Nombre, "en")}");
                 break;
             default:
                 return null;
@@ -64,5 +88,5 @@ public static class Guardian
 
     /// <summary>Si la persona ha autorizado esta categoría de antemano («*» = todo).</summary>
     public static bool Permitida(Irreversible accion, IReadOnlyCollection<string> permitidas) =>
-        permitidas.Any(p => p.Trim() == "*" || string.Equals(p.Trim(), accion.Categoria, StringComparison.OrdinalIgnoreCase));
+        permitidas.Any(p => CategoriaDe(p) is { } c && (c == "*" || c == accion.Categoria));
 }

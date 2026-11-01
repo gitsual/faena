@@ -57,7 +57,7 @@ public sealed class OllamaChatBackend : IChatBackend
         var reply = await _post($"{BaseUrl}/api/chat", payload, new Dictionary<string, string>(), ct).ConfigureAwait(false);
         if (reply is JsonObject o && o["error"] is JsonNode error)
             throw new InvalidOperationException($"Ollama: {error}");
-        return reply?["message"]?["content"]?.GetValue<string>() ?? throw new InvalidOperationException("Ollama no ha devuelto message.content");
+        return reply?["message"]?["content"]?.GetValue<string>() ?? throw new InvalidOperationException(Lengua.T("Ollama no ha devuelto message.content", "Ollama returned no message.content"));
     }
 }
 
@@ -161,7 +161,7 @@ public sealed class OpenAiChatBackend : IChatBackend
         if (reply is JsonObject o && o["error"] is JsonNode error)
             throw new InvalidOperationException($"OpenAI: {(error is JsonObject eo ? eo["message"] ?? error : error)}");
         var content = reply?["choices"]?[0]?["message"]?["content"];
-        if (content is null) throw new InvalidOperationException("el servidor no ha devuelto choices[0].message.content");
+        if (content is null) throw new InvalidOperationException(Lengua.T("el servidor no ha devuelto choices[0].message.content", "the server returned no choices[0].message.content"));
         return Protocol.QuitarThink(content.GetValueKind() == System.Text.Json.JsonValueKind.String ? content.GetValue<string>() : content.ToJsonString());
     }
 
@@ -246,8 +246,8 @@ public static class Backends
         using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
         var cuerpo = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"{url} ha contestado {(int)response.StatusCode}: {Observer.Recortar(cuerpo, 300)}");
-        return JsonNode.Parse(cuerpo) ?? throw new InvalidOperationException("respuesta JSON vacía");
+            throw new InvalidOperationException(Lengua.T($"{url} ha contestado {(int)response.StatusCode}: {Observer.Recortar(cuerpo, 300)}", $"{url} answered {(int)response.StatusCode}: {Observer.Recortar(cuerpo, 300)}"));
+        return JsonNode.Parse(cuerpo) ?? throw new InvalidOperationException(Lengua.T("respuesta JSON vacía", "empty JSON answer"));
     }
 
     /// <summary>
@@ -267,16 +267,16 @@ public static class Backends
         switch (chosen)
         {
             case "claude":
-                var key = Get("ANTHROPIC_API_KEY") ?? throw new ArgumentException("el backend claude necesita ANTHROPIC_API_KEY en el entorno");
+                var key = Get("ANTHROPIC_API_KEY") ?? throw new ArgumentException(Lengua.T("el backend claude necesita ANTHROPIC_API_KEY en el entorno (o la clave en los ajustes)", "the claude backend needs ANTHROPIC_API_KEY in the environment (or the key in Settings)"));
                 return new ClaudeChatBackend(key, model ?? DefaultClaudeModel);
             case "ollama":
                 return new OllamaChatBackend(model ?? DefaultOllamaModel, UrlOllama(Get("OLLAMA_HOST")));
             case "openai":
                 // Any OpenAI-compatible server: its base url (…/v1) is required, the key is optional.
-                var baseUrl = Get("FAENA_LLM_URL") ?? throw new ArgumentException("el backend openai necesita FAENA_LLM_URL en el entorno (p. ej. http://llm:8080/v1)");
+                var baseUrl = Get("FAENA_LLM_URL") ?? throw new ArgumentException(Lengua.T("el backend openai necesita FAENA_LLM_URL en el entorno o el servidor en los ajustes (p. ej. http://llm:8080/v1)", "the openai backend needs FAENA_LLM_URL in the environment or the server in Settings (e.g. http://llm:8080/v1)"));
                 return new OpenAiChatBackend(baseUrl, model ?? DefaultOpenAiModel, Get("FAENA_LLM_KEY"), Get("FAENA_LLM_VISION") == "1");
             default:
-                throw new ArgumentException($"backend desconocido «{chosen}»: usa ollama, claude u openai");
+                throw new ArgumentException(Lengua.T($"backend desconocido «{chosen}»: usa ollama, claude u openai", $"unknown backend “{chosen}”: use ollama, claude or openai"));
         }
     }
 }

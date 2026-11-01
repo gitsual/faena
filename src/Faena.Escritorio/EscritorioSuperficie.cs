@@ -67,7 +67,8 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
         var ruta = Resolver(app);
         var corto = Path.GetFileNameWithoutExtension(ruta);
         if (oculto && (Empaquetadas.Contains(corto) || ruta.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException($"«{corto}» es (o abre) una aplicación de la Tienda: se activaría en el escritorio de verdad, no en el oculto. Usa una aplicación Win32 clásica, o --ver si no te importa que se vea.");
+            throw new InvalidOperationException(Lengua.T($"«{corto}» es (o abre) una aplicación de la Tienda: se activaría en el escritorio de verdad, no en el oculto. Usa una aplicación Win32 clásica, o --ver si no te importa que se vea.",
+                $"“{corto}” is (or opens) a Store app: it would start on the real desktop, not on the hidden one. Use a classic Win32 application, or --show if you do not mind it being seen."));
         var nombreEscritorio = "";
         var escritorio = IntPtr.Zero;
         Process proceso;
@@ -83,7 +84,7 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
             {
                 var error = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
                 Nativo.CloseDesktop(escritorio);
-                throw new InvalidOperationException($"no se ha podido abrir «{ruta}» (error {error})");
+                throw new InvalidOperationException(Lengua.T($"no se ha podido abrir «{ruta}» (error {error})", $"could not open “{ruta}” (error {error})"));
             }
             Nativo.CloseHandle(pi.hThread);
             Nativo.CloseHandle(pi.hProcess);
@@ -92,7 +93,7 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
         else
         {
             proceso = Process.Start(new ProcessStartInfo(ruta, argumentos ?? "") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(ruta) ?? "" })
-                      ?? throw new InvalidOperationException($"no se ha podido abrir «{ruta}»");
+                      ?? throw new InvalidOperationException(Lengua.T($"no se ha podido abrir «{ruta}»", $"could not open “{ruta}”"));
         }
         var sup = new EscritorioSuperficie(escritorio, nombreEscritorio, proceso, corto);
         try
@@ -105,11 +106,13 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
                 var principal = ventanas.FirstOrDefault(t => titulo is null || t.Name.Contains(titulo, StringComparison.OrdinalIgnoreCase));
                 if (principal.Name is not null) { (sup._titulo, sup._hwndPrincipal) = principal; break; }
                 if (sup._proceso.HasExited && !sup.Oculto)
-                    throw new InvalidOperationException($"«{corto}» se ha cerrado sin abrir ventana (¿lanza otra aplicación?)");
+                    throw new InvalidOperationException(Lengua.T($"«{corto}» se ha cerrado sin abrir ventana (¿lanza otra aplicación?)", $"“{corto}” closed without opening a window (does it launch another application?)"));
                 if (reloj.Elapsed > TimeSpan.FromSeconds(20))
                     throw new TimeoutException(sup._proceso.HasExited
-                        ? $"«{corto}» se ha cerrado sin abrir ventana en el escritorio oculto: probablemente delega en una aplicación de la Tienda."
-                        : $"«{corto}» no ha abierto ninguna ventana{(titulo is null ? "" : $" con «{titulo}» en el título")} en 20 s");
+                        ? Lengua.T($"«{corto}» se ha cerrado sin abrir ventana en el escritorio oculto: probablemente delega en una aplicación de la Tienda.",
+                                   $"“{corto}” closed without opening a window on the hidden desktop: it probably hands over to a Store app.")
+                        : Lengua.T($"«{corto}» no ha abierto ninguna ventana{(titulo is null ? "" : $" con «{titulo}» en el título")} en 20 s",
+                                   $"“{corto}” has not opened any window{(titulo is null ? "" : $" with “{titulo}” in its title")} in 20 s"));
                 await Task.Delay(250, ct).ConfigureAwait(false);
             }
             try { sup._proceso.WaitForInputIdle(3000); } catch (InvalidOperationException) { }
@@ -134,7 +137,7 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
                 try { c = Path.Combine(dir.Trim('"'), n); } catch (ArgumentException) { continue; }
                 if (File.Exists(c)) return c;
             }
-        throw new FileNotFoundException($"no encuentro la aplicación «{app}»");
+        throw new FileNotFoundException(Lengua.T($"no encuentro la aplicación «{app}»", $"cannot find the application “{app}”"));
     }
 
     // ------------------------------------------------------------------ hilos en el escritorio
@@ -225,18 +228,18 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
     private (Observation, Dictionary<int, AutomationElement>) Observar()
     {
         var ventanas = Ventanas();
-        if (ventanas.Count == 0) throw new InvalidOperationException("la aplicación no tiene ninguna ventana abierta");
+        if (ventanas.Count == 0) throw new InvalidOperationException(Lengua.T("la aplicación no tiene ninguna ventana abierta", "the application has no open window"));
         var obs = new Observation();
         var refs = new Dictionary<int, AutomationElement>();
         var texto = new StringBuilder();
         var principal = ventanas.FirstOrDefault(EsPrincipal) ?? ventanas[^1];
         var tituloPrincipal = Nombre(principal);
         if (tituloPrincipal.Length != 0) _titulo = tituloPrincipal;
-        obs.Title = EsPrincipal(ventanas[0]) ? _titulo : $"{Nombre(ventanas[0])} (sobre {_titulo})";
+        obs.Title = EsPrincipal(ventanas[0]) ? _titulo : $"{Nombre(ventanas[0])} (over {_titulo})";
         obs.Url = $"{_nombreProceso} — {obs.Title}";
         foreach (var ventana in ventanas)
         {
-            var etiqueta = ventanas.Count == 1 ? "" : EsPrincipal(ventana) ? $"ventana principal «{Nombre(ventana)}»" : $"diálogo «{Nombre(ventana)}» (delante)";
+            var etiqueta = ventanas.Count == 1 ? "" : EsPrincipal(ventana) ? $"main window “{Nombre(ventana)}”" : $"dialog “{Nombre(ventana)}” (in front)";
             if (texto.Length < MaxTexto) texto.Append(Nombre(ventana)).Append(": ");
             Recorrer(ventana, 0, (el, corto) =>
             {
@@ -285,16 +288,16 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
 
     public async Task<JsonObject?> ActuarAsync(Observation obs, Decision d, CancellationToken ct)
     {
-        if (d.Accion == "ir") throw new InvalidOperationException("en una aplicación de escritorio no hay urls: usa los controles de la ventana");
+        if (d.Accion == "ir") throw new InvalidOperationException("a desktop application has no urls: use the controls of the window");
         if (d.Accion == "tecla")
         {
             var tecla = TeclaDe(d.Valor);
             await EnEscritorioAsync(() => MandarTecla(tecla)).ConfigureAwait(false);
-            return new JsonObject { ["tipo"] = "tecla", ["valor"] = tecla, ["desc"] = $"Pulsa la tecla {tecla}" };
+            return new JsonObject { ["tipo"] = "tecla", ["valor"] = tecla, ["desc"] = Lengua.Tecla(tecla) };
         }
         if (d.Ref is not int n || !_refs.TryGetValue(n, out var el) || obs.Elemento(n) is not { } visto) return null;
         var selector = await EnEscritorioAsync(() => SelectorDe(el)).ConfigureAwait(false);
-        var cosa = visto.Nombre.Length != 0 ? $"{visto.Tipo} «{visto.Nombre}»" : visto.Tipo;
+        var cosa = Lengua.Cosa(visto.Tipo, visto.Nombre);
         await Hacer(el, d.Accion, d.Valor).ConfigureAwait(false);
         _ultimo = el;
         return d.Accion switch
@@ -302,13 +305,13 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
             "clic" => new JsonObject
             {
                 ["tipo"] = "clic", ["selector"] = selector,
-                ["desc"] = $"{(visto.Tipo == "la casilla" ? (visto.Estado.Contains("marcado") ? "Desmarca" : "Marca") : "Pulsa")} {cosa}",
+                ["desc"] = Lengua.Clic(cosa, visto.Tipo == "la casilla" ? (visto.Estado.Contains("marcado") ? "off" : "on") : ""),
                 ["guarda"] = Guardian.Categoria(visto.Nombre) is not null,
             },
-            "señalar" => new JsonObject { ["tipo"] = "señalar", ["selector"] = selector, ["desc"] = $"Señala {cosa}" },
-            "escribir" => new JsonObject { ["tipo"] = "escribir", ["selector"] = selector, ["valor"] = d.Valor, ["desc"] = $"Escribe «{d.Valor}»{(visto.Nombre.Length != 0 ? $" en el campo «{visto.Nombre}»" : "")}" },
-            "elegir" => new JsonObject { ["tipo"] = "elegir", ["selector"] = selector, ["valor"] = d.Valor, ["desc"] = $"Elige «{d.Valor}»{(visto.Nombre.Length != 0 ? $" en «{visto.Nombre}»" : "")}" },
-            _ => throw new ArgumentException($"acción desconocida «{d.Accion}»"),
+            "señalar" => new JsonObject { ["tipo"] = "señalar", ["selector"] = selector, ["desc"] = Lengua.Senala(cosa) },
+            "escribir" => new JsonObject { ["tipo"] = "escribir", ["selector"] = selector, ["valor"] = d.Valor, ["desc"] = Lengua.Escribe(d.Valor, visto.Nombre) },
+            "elegir" => new JsonObject { ["tipo"] = "elegir", ["selector"] = selector, ["valor"] = d.Valor, ["desc"] = Lengua.Elige(d.Valor, visto.Nombre) },
+            _ => throw new ArgumentException($"unknown action “{d.Accion}”"),
         };
     }
 
@@ -319,7 +322,7 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
         var opcional = paso["opcional"] is JsonValue o && o.TryGetValue<bool>(out var b) && b;
         if (tipo == "esperar") { await Task.Delay(1000, ct).ConfigureAwait(false); return; }
         if (tipo == "tecla") { await EnEscritorioAsync(() => MandarTecla(TeclaDe(valor))).ConfigureAwait(false); return; }
-        if (tipo == "ir") throw new InvalidOperationException("un paso «ir» no vale en una aplicación de escritorio");
+        if (tipo == "ir") throw new InvalidOperationException(Lengua.T("un paso «ir» no vale en una aplicación de escritorio", "a “goto” step does not work in a desktop application"));
         var selector = SelectorUia.Parse(Str(paso, "selector"));
         AutomationElement? el = null;
         var reloj = Stopwatch.StartNew();
@@ -386,12 +389,12 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
         "escribir" => EnEscritorioAsync(() => Escribir(el, valor)),
         "elegir" => EnEscritorioAsync(() => Elegir(el, valor)),
         "señalar" => EnEscritorioAsync(() => { _ = el.Current.Name; }),
-        _ => throw new ArgumentException($"acción desconocida «{accion}»"),
+        _ => throw new ArgumentException($"unknown action “{accion}”"),
     };
 
     private static void Pulsar(AutomationElement el)
     {
-        if (!el.Current.IsEnabled) throw new InvalidOperationException("el control está deshabilitado");
+        if (!el.Current.IsEnabled) throw new InvalidOperationException(Lengua.T("el control está deshabilitado", "the control is disabled"));
         // Un botón Win32 de verdad (también los de WinForms y los de los cuadros de diálogo): se le
         // dice a su ventana padre que lo han pulsado, por mensaje. Es lo que hace el propio botón al
         // soltar el ratón, no necesita foco y vuelve enseguida; el Invoke de UI Automation, en
@@ -416,7 +419,7 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
         if (el.TryGetCurrentPattern(TogglePattern.Pattern, out var tog)) { ((TogglePattern)tog).Toggle(); return; }
         if (el.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var sel)) { ((SelectionItemPattern)sel).Select(); return; }
         if (el.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out ec)) { ((ExpandCollapsePattern)ec).Expand(); return; }
-        throw new InvalidOperationException("este control no se puede pulsar sin ratón (no tiene Invoke, Toggle, SelectionItem ni ExpandCollapse)");
+        throw new InvalidOperationException(Lengua.T("este control no se puede pulsar sin ratón (no tiene Invoke, Toggle, SelectionItem ni ExpandCollapse)", "this control cannot be clicked without a mouse (it has no Invoke, Toggle, SelectionItem or ExpandCollapse)"));
     }
 
     private static void Escribir(AutomationElement el, string valor)
@@ -450,7 +453,7 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
                 ((ValuePattern)v).SetValue(valor);
                 return;
             }
-            throw new InvalidOperationException($"no hay ninguna opción «{valor}»");
+            throw new InvalidOperationException(Lengua.T($"no hay ninguna opción «{valor}»", $"there is no option “{valor}”"));
         }
         ((SelectionItemPattern)elegida.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
         if (expandido)
@@ -466,8 +469,8 @@ public sealed class EscritorioSuperficie : ISuperficie, IAsyncDisposable
     /// </summary>
     private void MandarTecla(string tecla)
     {
-        if (tecla.Contains('+')) throw new InvalidOperationException($"las combinaciones ({tecla}) no se pueden mandar sin teclado de verdad: usa la opción del menú");
-        var codigo = Nativo.Tecla(tecla) ?? (tecla.Length == 1 ? ((int)char.ToUpperInvariant(tecla[0]), tecla[0]) : throw new InvalidOperationException($"tecla desconocida «{tecla}»"));
+        if (tecla.Contains('+')) throw new InvalidOperationException(Lengua.T($"las combinaciones ({tecla}) no se pueden mandar sin teclado de verdad: usa la opción del menú", $"key combinations ({tecla}) cannot be sent without a real keyboard: use the menu option"));
+        var codigo = Nativo.Tecla(tecla) ?? (tecla.Length == 1 ? ((int)char.ToUpperInvariant(tecla[0]), tecla[0]) : throw new InvalidOperationException(Lengua.T($"tecla desconocida «{tecla}»", $"unknown key “{tecla}”")));
         IntPtr hwnd = IntPtr.Zero;
         for (var e = _ultimo; e is not null && hwnd == IntPtr.Zero;)
         {

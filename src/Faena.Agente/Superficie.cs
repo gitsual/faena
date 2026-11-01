@@ -51,13 +51,13 @@ public sealed class WebSuperficie(IPage page) : ISuperficie
         {
             var tecla = Palabras.Tecla(d.Valor);
             await page.Keyboard.PressAsync(tecla).ConfigureAwait(false);
-            return new JsonObject { ["tipo"] = "tecla", ["valor"] = tecla, ["desc"] = $"Pulsa la tecla {Palabras.Teclas.GetValueOrDefault(tecla, tecla)}" };
+            return new JsonObject { ["tipo"] = "tecla", ["valor"] = tecla, ["desc"] = Lengua.Tecla(tecla) };
         }
         if (d.Accion == "ir")
         {
             var url = d.Valor.Trim();
             await page.GotoAsync(url).ConfigureAwait(false);
-            return new JsonObject { ["tipo"] = "ir", ["valor"] = url, ["desc"] = $"Ve a «{url}»" };
+            return new JsonObject { ["tipo"] = "ir", ["valor"] = url, ["desc"] = Lengua.Ve(url) };
         }
         var el = d.Ref is int n ? obs.Elemento(n) : null;
         if (el is null) return null;
@@ -68,7 +68,7 @@ public sealed class WebSuperficie(IPage page) : ISuperficie
         if (selector.Length == 0) selector = $"[data-faena-ref=\"{el.Ref}\"]";
         var locator = Observer.LocatorDe(page, obs, el);
         var nombre = el.Nombre;
-        var cosa = nombre.Length != 0 ? $"{el.Tipo} «{nombre}»" : el.Tipo;
+        var cosa = Lengua.Cosa(el.Tipo, nombre);
         switch (d.Accion)
         {
             case "señalar":
@@ -77,24 +77,23 @@ public sealed class WebSuperficie(IPage page) : ISuperficie
                 // comprobar que el elemento está ahí y a la vista.
                 try { await locator.ScrollIntoViewIfNeededAsync(new LocatorScrollIntoViewIfNeededOptions { Timeout = 5000 }).ConfigureAwait(false); } catch (Exception) { }
                 await locator.HoverAsync(new LocatorHoverOptions { Timeout = 10000 }).ConfigureAwait(false);
-                return new JsonObject { ["tipo"] = "señalar", ["selector"] = selector, ["desc"] = $"Señala {cosa}" };
+                return new JsonObject { ["tipo"] = "señalar", ["selector"] = selector, ["desc"] = Lengua.Senala(cosa) };
             }
             case "clic":
             {
                 await locator.ClickAsync(new LocatorClickOptions { Timeout = 10000 }).ConfigureAwait(false);
-                var verbo = el.Tipo == "la casilla" ? (el.Estado.Contains("marcado") ? "Desmarca" : "Marca") : "Pulsa";
+                var marca = el.Tipo == "la casilla" ? (el.Estado.Contains("marcado") ? "off" : "on") : "";
                 // El aviso de cookies sale la primera vez y luego ya no: ese clic es opcional.
                 if (Palabras.Cookies.IsMatch(nombre) || Palabras.Cookies.IsMatch(selector))
-                    return new JsonObject { ["tipo"] = "clic", ["selector"] = selector, ["opcional"] = true, ["desc"] = $"{verbo} {cosa} (aviso de cookies: si no sale, se salta)" };
-                return new JsonObject { ["tipo"] = "clic", ["selector"] = selector, ["desc"] = $"{verbo} {cosa}", ["guarda"] = Palabras.Guardan.IsMatch(nombre) };
+                    return new JsonObject { ["tipo"] = "clic", ["selector"] = selector, ["opcional"] = true, ["desc"] = Lengua.Cookies(Lengua.Clic(cosa, marca)) };
+                return new JsonObject { ["tipo"] = "clic", ["selector"] = selector, ["desc"] = Lengua.Clic(cosa, marca), ["guarda"] = Palabras.Guardan.IsMatch(nombre) };
             }
             case "escribir":
             {
                 await locator.FillAsync(d.Valor, new LocatorFillOptions { Timeout = 10000 }).ConfigureAwait(false);
                 // fill() solo no despierta a todos los frameworks; el evento input sí.
                 try { await locator.DispatchEventAsync("input").ConfigureAwait(false); } catch (Exception) { }
-                var donde = nombre.Length != 0 ? $" en el campo «{nombre}»" : "";
-                return new JsonObject { ["tipo"] = "escribir", ["selector"] = selector, ["valor"] = d.Valor, ["desc"] = $"Escribe «{d.Valor}»{donde}" };
+                return new JsonObject { ["tipo"] = "escribir", ["selector"] = selector, ["valor"] = d.Valor, ["desc"] = Lengua.Escribe(d.Valor, nombre) };
             }
             case "elegir":
             {
@@ -110,11 +109,10 @@ public sealed class WebSuperficie(IPage page) : ISuperficie
                     var valores = await locator.SelectOptionAsync(d.Valor, new LocatorSelectOptionOptions { Timeout = 10000 }).ConfigureAwait(false);
                     elegido = valores.Count != 0 ? valores[0] : d.Valor;
                 }
-                var donde = nombre.Length != 0 && nombre.Length < 40 ? $" en «{nombre}»" : "";
-                return new JsonObject { ["tipo"] = "elegir", ["selector"] = selector, ["valor"] = elegido, ["desc"] = $"Elige «{d.Valor}»{donde}" };
+                return new JsonObject { ["tipo"] = "elegir", ["selector"] = selector, ["valor"] = elegido, ["desc"] = Lengua.Elige(d.Valor, nombre.Length < 40 ? nombre : "") };
             }
             default:
-                throw new ArgumentException($"acción desconocida «{d.Accion}»");
+                throw new ArgumentException($"unknown action “{d.Accion}”");
         }
     }
 

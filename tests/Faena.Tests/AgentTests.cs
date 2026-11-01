@@ -17,6 +17,9 @@ namespace Faena.Tests;
 /// </summary>
 public sealed class AgentTests(ITestOutputHelper salida)
 {
+    // These check the Spanish texts of the log and the steps (I18nTests checks the English ones).
+    private readonly Idioma _idioma = new("es");
+
     // ------------------------------------------------------------------ ParseDecision
 
     [Fact]
@@ -95,28 +98,30 @@ public sealed class AgentTests(ITestOutputHelper salida)
             ],
         };
         var texto = Protocol.Observacion(obs);
-        Assert.Contains("Título: Ejemplo\n", texto);
+        // What the model reads is English, whatever the interface says.
+        Assert.Contains("Title: Ejemplo\n", texto);
         Assert.Contains("Url: https://ejemplo.test/\n", texto);
-        Assert.Contains("Texto visible: Bienvenido\nal ejemplo\n", texto);
-        Assert.Contains("\n1 | el botón | Guardar\n", texto);
-        Assert.Contains("\n2 | el campo | Nombre | hola\n", texto);
-        Assert.Contains("\n3 | la casilla | Acepto / condiciones | | marcado\n", texto);
-        Assert.Contains("[marco: iframe[name=\"m\"] >> internal:control=enter-frame >> ]\n4 | el enlace | Ayuda | | deshabilitado\n", texto);
-        Assert.DoesNotContain("recortada", texto);
+        Assert.Contains("Visible text: Bienvenido\nal ejemplo\n", texto);
+        Assert.Contains("\n1 | button | Guardar\n", texto);
+        Assert.Contains("\n2 | field | Nombre | hola\n", texto);
+        Assert.Contains("\n3 | checkbox | Acepto / condiciones | | checked\n", texto);
+        Assert.Contains("[frame: iframe[name=\"m\"] >> internal:control=enter-frame >> ]\n4 | link | Ayuda | | disabled\n", texto);
+        Assert.DoesNotContain("trimmed", texto);
 
         obs.Total = 400;
-        Assert.Contains("lista recortada: hay 400 elementos y solo se muestran 4", Protocol.Observacion(obs));
+        Assert.Contains("list trimmed: there are 400 elements and only 4 are shown", Protocol.Observacion(obs));
     }
 
     [Fact]
     public void ElSystemPromptLlevaElObjetivoLasAccionesYElEjemplo()
     {
         var prompt = Protocol.SystemPromptTarea("Busca \"Madrid\"");
-        Assert.Contains("OBJETIVO: Busca \"Madrid\"", prompt);
-        foreach (var accion in Protocol.Acciones.Where(a => a is not "habilidad" and not "señalar")) Assert.Contains($"\"{accion}\"", prompt);
+        Assert.Contains("GOAL: Busca \"Madrid\"", prompt);
+        foreach (var accion in Protocol.Acciones.Where(a => a is not "habilidad" and not "señalar")) Assert.Contains($"\"{Protocol.AccionEn[accion]}\"", prompt);
         Assert.Contains("\"irreversible\"", prompt);
         Assert.DoesNotContain("\"frase\"", prompt);
-        Assert.Contains("Ejemplo: {\"pensamiento\"", prompt);
+        Assert.Contains("Example: {\"thought\"", prompt);
+        Assert.Contains("Write \"summary\" in Spanish", prompt);
         Assert.DoesNotContain("\r", prompt);
     }
 
@@ -345,17 +350,17 @@ public sealed class AgentTests(ITestOutputHelper salida)
 
         // Lo que ve el modelo: el objetivo en el sistema, la observación y el resultado anterior en el usuario.
         var (system, mensajes) = modelo.Llamadas[4];
-        Assert.Contains("OBJETIVO: Rellena el formulario", system);
+        Assert.Contains("GOAL: Rellena el formulario", system);
         var usuario = mensajes[^1].Text;
-        Assert.Contains("no existe el elemento 9", usuario);
+        Assert.Contains("there is no element 9", usuario);
         Assert.Contains("1. Pulsa el botón «Siguiente»", usuario);
         Assert.Contains("3. Pulsa la tecla Intro", usuario);
-        Assert.Contains("1 | el botón | Siguiente", usuario);
-        Assert.Contains("Pasos que quedan como máximo: 22.", usuario);
+        Assert.Contains("1 | button | Siguiente", usuario);
+        Assert.Contains("Steps left at most: 22.", usuario);
         // El historial: los turnos anteriores van por parejas user/assistant antes del actual.
         Assert.Equal(new[] { "user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user" }, mensajes.Select(m => m.Role));
-        Assert.Contains("Página: Ejemplo de prueba", mensajes[0].Text);   // los antiguos, resumidos
-        Assert.Contains("PÁGINA ACTUAL", mensajes[^3].Text);            // los recientes, enteros
+        Assert.Contains("Page: Ejemplo de prueba", mensajes[0].Text);   // los antiguos, resumidos
+        Assert.Contains("CURRENT PAGE", mensajes[^3].Text);            // los recientes, enteros
     }
 
     /// <summary>Un <see cref="IProgress{T}"/> que apunta en el acto (el de .NET despacha por el contexto y llega tarde a las aserciones).</summary>
@@ -386,7 +391,7 @@ public sealed class AgentTests(ITestOutputHelper salida)
         var reintento = modelo.Llamadas[1].Messages;
         Assert.Equal("assistant", reintento[^2].Role);
         Assert.Equal("esto no es json", reintento[^2].Text);
-        Assert.StartsWith("Tu respuesta no vale:", reintento[^1].Text);
+        Assert.StartsWith("Your answer is not valid:", reintento[^1].Text);
         Assert.Contains(registro, l => l.StartsWith("La respuesta del modelo no vale"));
     }
 
@@ -405,7 +410,7 @@ public sealed class AgentTests(ITestOutputHelper salida)
         Assert.False(r.Ok);
         Assert.Empty(r.Pasos);
         Assert.Equal("No se puede pulsar", r.Resumen);
-        Assert.Contains("ha fallado: el elemento no se ha podido pulsar", modelo.Llamadas[1].Messages[^1].Text);
+        Assert.Contains("failed: the element could not be clicked", modelo.Llamadas[1].Messages[^1].Text);
     }
 
     // ------------------------------------------------------------------ con Chromium

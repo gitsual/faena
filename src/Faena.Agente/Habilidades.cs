@@ -76,13 +76,13 @@ public static class Habilidades
             Ruta = ruta,
         };
         if (h.Nombre.Length == 0) h.Nombre = ruta.Length != 0 ? Path.GetFileNameWithoutExtension(ruta) : "";
-        if (h.Nombre.Length == 0) throw new ArgumentException("la habilidad no tiene nombre");
+        if (h.Nombre.Length == 0) throw new ArgumentException(Lengua.T("la habilidad no tiene nombre", "the skill has no name"));
         if (tabla.TryGetValue("cuando", out var cuando) && cuando is TomlArray arr)
             h.Cuando = arr.Select(x => x?.ToString() ?? "").Where(x => x.Trim().Length != 0).ToList();
         if (tabla.TryGetValue("parametros", out var ps) && ps is TomlTable pt)
             foreach (var (k, v) in pt) h.Parametros[k] = Convert.ToString(v, CultureInfo.InvariantCulture) ?? "";
         if (!tabla.TryGetValue("pasos", out var pasos) || pasos is not TomlTableArray pasosArr || pasosArr.Count == 0)
-            throw new ArgumentException("la habilidad no tiene [[pasos]]");
+            throw new ArgumentException(Lengua.T("la habilidad no tiene [[pasos]]", "the skill has no [[pasos]]"));
         var n = 0;
         foreach (var p in pasosArr)
         {
@@ -97,9 +97,9 @@ public static class Habilidades
                     _ => JsonValue.Create(Convert.ToString(v, CultureInfo.InvariantCulture) ?? ""),
                 };
             var tipo = Observer.Str(paso, "tipo");
-            if (!Tipos.Contains(tipo)) throw new ArgumentException($"paso {n}: tipo desconocido «{tipo}»");
+            if (!Tipos.Contains(tipo)) throw new ArgumentException(Lengua.T($"paso {n}: tipo desconocido «{tipo}»", $"step {n}: unknown type “{tipo}”"));
             if (tipo is "clic" or "señalar" or "escribir" or "elegir" && Observer.Str(paso, "selector").Length == 0)
-                throw new ArgumentException($"paso {n}: «{tipo}» necesita selector");
+                throw new ArgumentException(Lengua.T($"paso {n}: «{tipo}» necesita selector", $"step {n}: “{tipo}” needs a selector"));
             h.Pasos.Add(paso);
         }
         return h;
@@ -109,8 +109,10 @@ public static class Habilidades
     public static string Escribir(Habilidad h)
     {
         var sb = new StringBuilder();
-        sb.Append("# Habilidad de faena: un procedimiento aprendido. Formato en docs/HABILIDADES.md de faena.\n");
-        sb.Append("# Los {huecos} de los pasos se rellenan con los parámetros que el modelo saca del objetivo.\n");
+        sb.Append(Lengua.T("# Habilidad de faena: un procedimiento aprendido. Formato en docs/HABILIDADES.md de faena.\n",
+                           "# A faena skill: a learned procedure. Format in faena's docs/HABILIDADES.md.\n"));
+        sb.Append(Lengua.T("# Los {huecos} de los pasos se rellenan con los parámetros que el modelo saca del objetivo.\n",
+                           "# The {gaps} in the steps are filled with the parameters the model takes from the goal.\n"));
         sb.Append("nombre = ").Append(Cadena(h.Nombre)).Append('\n');
         sb.Append("descripcion = ").Append(Cadena(h.Descripcion)).Append('\n');
         sb.Append("cuando = [").Append(string.Join(", ", h.Cuando.Select(Cadena))).Append("]\n");
@@ -118,7 +120,7 @@ public static class Habilidades
         if (h.Inicio.Length != 0) sb.Append("inicio = ").Append(Cadena(h.Inicio)).Append('\n');
         if (h.Origen.Length != 0) sb.Append("origen = ").Append(Cadena(h.Origen)).Append('\n');
         if (h.Aprendida.Length != 0) sb.Append("aprendida = ").Append(Cadena(h.Aprendida)).Append('\n');
-        sb.Append("\n[parametros]  # nombre = valor de ejemplo\n");
+        sb.Append(Lengua.T("\n[parametros]  # nombre = valor de ejemplo\n", "\n[parametros]  # name = example value\n"));
         foreach (var (k, v) in h.Parametros) sb.Append(Clave(k)).Append(" = ").Append(Cadena(v)).Append('\n');
         foreach (var p in h.Pasos)
         {
@@ -173,11 +175,12 @@ public static class Habilidades
                 var param = NombreParametro(Observer.Str(paso, "desc"), tipo, h.Parametros.Keys);
                 h.Parametros[param] = valor;
                 paso["valor"] = "{" + param + "}";
-                paso["desc"] = Observer.Str(paso, "desc").Replace($"«{valor}»", "«{" + param + "}»", StringComparison.Ordinal);
+                paso["desc"] = Observer.Str(paso, "desc").Replace($"«{valor}»", "«{" + param + "}»", StringComparison.Ordinal)
+                    .Replace($"“{valor}”", "“{" + param + "}”", StringComparison.Ordinal);
             }
             h.Pasos.Add(paso);
         }
-        if (h.Pasos.Count == 0) throw new ArgumentException("no hay pasos que aprender");
+        if (h.Pasos.Count == 0) throw new ArgumentException(Lengua.T("no hay pasos que aprender", "there are no steps to learn"));
         // La descripción suele ser el objetivo de aquella vez: sus valores también pasan a ser
         // huecos, para que el modelo la reconozca con otros valores y no la confunda con esos.
         foreach (var (param, valor) in h.Parametros.OrderByDescending(p => p.Value.Length))
@@ -187,10 +190,10 @@ public static class Habilidades
         return h;
     }
 
-    /// <summary>«Escribe «x» en el campo «Title»» → <c>title</c>; si no hay nombre, <c>texto1</c>.</summary>
+    /// <summary>«Escribe «x» en el campo «Title»» or «Type “x” in the “Title” field» → <c>title</c>; with no name, <c>texto</c>.</summary>
     private static string NombreParametro(string desc, string tipo, IEnumerable<string> usados)
     {
-        var comillas = Regex.Matches(desc, "«([^»]*)»").Select(m => m.Groups[1].Value).ToList();
+        var comillas = Lengua.Citas(desc);
         var campo = comillas.Count >= 2 ? comillas[^1] : "";
         var baseNombre = Slug(campo).Replace('-', '_');
         if (baseNombre.Length == 0 || baseNombre.Length > 30) baseNombre = tipo == "elegir" ? "opcion" : "texto";
@@ -246,25 +249,25 @@ public static class Habilidades
         return string.Equals(Path.GetFileName(a), Path.GetFileName(b), StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Las obras como se le enseñan al modelo en el prompt: una línea con nombre, parámetros (con ejemplo) y qué hace.</summary>
+    /// <summary>The procedures as the model sees them in the prompt: one line with name, parameters (with an example) and what it does.</summary>
     public static string Menu(IEnumerable<Habilidad> obras) => string.Join("\n", obras.Select(h =>
-        $"- {h.Nombre}({string.Join(", ", h.Parametros.Select(p => $"{p.Key}: p. ej. «{p.Value}»"))}): {h.Descripcion}"));
+        $"- {h.Nombre}({string.Join(", ", h.Parametros.Select(p => $"{p.Key}: e.g. “{p.Value}”"))}): {h.Descripcion}"));
 
-    /// <summary>Lo que se le pregunta al modelo para elegir entre las candidatas.</summary>
+    /// <summary>What the model is asked to choose among the candidates (in English, like every prompt).</summary>
     public static string PromptEleccion(string objetivo, IReadOnlyList<Habilidad> candidatas)
     {
         var sb = new StringBuilder();
-        sb.Append("Una persona encarga esta tarea: «").Append(objetivo).Append("».\n");
-        sb.Append("Estas son habilidades aprendidas (procedimientos que ya se sabe hacer). Elige la que hace EXACTAMENTE esa tarea, o ninguna si no encaja del todo.\n\n");
+        sb.Append("A person hands over this task: “").Append(objetivo).Append("”.\n");
+        sb.Append("These are learned skills (procedures already known). Choose the one that does EXACTLY that task, or none if none fits completely.\n\n");
         foreach (var h in candidatas)
         {
             sb.Append("- ").Append(h.Nombre).Append(": ").Append(h.Descripcion).Append('\n');
             if (h.Parametros.Count != 0)
-                sb.Append("  parámetros (con un valor de ejemplo): ")
-                  .Append(string.Join(", ", h.Parametros.Select(p => $"{p.Key} = «{p.Value}»"))).Append('\n');
+                sb.Append("  parameters (with an example value): ")
+                  .Append(string.Join(", ", h.Parametros.Select(p => $"{p.Key} = “{p.Value}”"))).Append('\n');
         }
-        sb.Append("\nSi eliges una, saca del encargo el valor de cada parámetro; si el encargo no lo dice, deja el de ejemplo.\n");
-        sb.Append("Responde SOLO con JSON: {\"habilidad\":\"nombre o vacío\",\"parametros\":{\"nombre\":\"valor\"},\"porque\":\"…\"}");
+        sb.Append("\nIf you choose one, take the value of each parameter from the task; if the task does not say it, keep the example.\n");
+        sb.Append("Answer ONLY with JSON: {\"skill\":\"name or empty\",\"params\":{\"name\":\"value\"},\"why\":\"…\"}");
         return sb.ToString();
     }
 
@@ -278,11 +281,11 @@ public static class Habilidades
         try { o = JsonNode.Parse(limpio[i..(j + 1)]) as JsonObject; }
         catch (System.Text.Json.JsonException) { return null; }
         if (o is null) return null;
-        var nombre = Observer.Str(o, "habilidad").Trim();
+        var nombre = (o.ContainsKey("skill") ? Observer.Str(o, "skill") : Observer.Str(o, "habilidad")).Trim();
         var h = candidatas.FirstOrDefault(c => string.Equals(c.Nombre, nombre, StringComparison.OrdinalIgnoreCase));
         if (h is null) return null;
         var valores = new Dictionary<string, string>(h.Parametros, StringComparer.Ordinal);
-        if (o["parametros"] is JsonObject ps)
+        if ((o["params"] ?? o["parametros"]) is JsonObject ps)
             foreach (var (k, v) in ps)
                 if (valores.ContainsKey(k) && v is not null && v.ToString().Trim().Length != 0)
                     valores[k] = v is JsonValue jv && jv.TryGetValue<string>(out var s) ? s : v.ToString();
@@ -296,7 +299,7 @@ public static class Habilidades
         string respuesta;
         try
         {
-            respuesta = await backend.CompleteAsync("Eliges procedimientos aprendidos para una tarea. Respondes solo con JSON.",
+            respuesta = await backend.CompleteAsync("You choose learned procedures for a task. You answer only with JSON.",
                 [new ChatMessage("user", PromptEleccion(objetivo, candidatas))], ct).ConfigureAwait(false);
         }
         catch (Exception) when (!ct.IsCancellationRequested) { return null; }
