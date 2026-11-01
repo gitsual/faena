@@ -59,6 +59,12 @@ public static class Paths
     /// <summary>The persistent browser profile of the tasks: sessions survive from one job to the next.</summary>
     public static string PerfilTareas => Path.Combine(Datos, "navegador-tareas");
 
+    /// <summary>
+    /// The window's Settings (language and AI, with the key): with what only the program reads, not
+    /// in the folder people browse; $FAENA_AJUSTES overrides it.
+    /// </summary>
+    public static string Ajustes => Env("FAENA_AJUSTES") ?? Path.Combine(Datos, "ajustes.json");
+
     /// <summary>User data folder of the WebView2 window.</summary>
     public static string Ventana => Path.Combine(Datos, "ventana");
 

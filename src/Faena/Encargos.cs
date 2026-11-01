@@ -46,16 +46,16 @@ public static class Encargos
         var objetivo = Campos.Str(pedido, "objetivo").Trim();
         var habilidad = Campos.Str(pedido, "habilidad").Trim();
         var sinModelo = Campos.Bool(pedido, "sin_modelo");
-        if (sinModelo && habilidad.Length == 0) throw new ArgumentException("Para hacerlo sin IA hay que elegir una obra del repertorio.");
+        if (sinModelo && habilidad.Length == 0) throw new ArgumentException(Lengua.T("Para hacerlo sin pensar hay que elegir un oficio.", "To do it without thinking, choose a trade."));
         if (objetivo.Length == 0)
         {
-            if (habilidad.Length == 0) throw new ArgumentException("Cuéntale a la IA qué tiene que hacer.");
-            objetivo = $"Repetir «{habilidad}»";
+            if (habilidad.Length == 0) throw new ArgumentException(Lengua.T("Dígame qué hay que hacer.", "Tell me what has to be done."));
+            objetivo = Lengua.T($"Repetir «{habilidad}»", $"Replay “{habilidad}”");
         }
         var url = Campos.Str(pedido, "url").Trim();
         var app = Campos.Str(pedido, "app").Trim();
-        if (url.Length != 0 && app.Length != 0) throw new ArgumentException("Elige una web o un programa, no los dos.");
-        if (url.Length == 0 && app.Length == 0 && habilidad.Length == 0) throw new ArgumentException("Dile dónde: una web o un programa del ordenador.");
+        if (url.Length != 0 && app.Length != 0) throw new ArgumentException(Lengua.T("Elija una web o un programa, no los dos.", "Choose a website or a program, not both."));
+        if (url.Length == 0 && app.Length == 0 && habilidad.Length == 0) throw new ArgumentException(Lengua.T("Dígame dónde: una web o un programa del ordenador.", "Tell me where: a website or a program on this computer."));
         if (url.Length != 0 && !Regex.IsMatch(url, "^https?://", RegexOptions.IgnoreCase)) url = "https://" + url;
         var maxPasos = Entero(pedido["max_pasos"], 30, 1, 200);
         var maxMinutos = Entero(pedido["max_minutos"], 10, 1, 240);
@@ -78,6 +78,7 @@ public static class Encargos
             ["ver"] = Campos.Bool(pedido, "ver"),
             ["capturas"] = Campos.Bool(pedido, "capturas"),
             ["parametros"] = pedido["parametros"] is JsonObject po ? po.DeepClone() : new JsonObject(),
+            ["idioma"] = Lengua.Actual,
         };
         File.WriteAllText(Path.Combine(carpeta, "encargo.json"), Json.Dump(encargo, indent: true), new UTF8Encoding(false));
 
@@ -97,10 +98,14 @@ public static class Encargos
                 argv.AddRange(["--permitir", p]);
         if (Campos.Bool(pedido, "ver")) argv.Add("--ver");
         if (Campos.Bool(pedido, "capturas")) argv.Add("--capturas");
-        if (Campos.Str(pedido, "aprender").Trim() is { Length: > 0 } aprender) argv.AddRange(["--aprender", aprender]);
+        if (Campos.Str(pedido, "aprender").Trim() is { Length: > 0 } aprender)
+        {
+            argv.AddRange(["--aprender", aprender]);
+            if (Campos.Bool(pedido, "exportar_skill")) argv.Add("--skill");
+        }
         argv.AddRange(["--max-pasos", maxPasos.ToString(CultureInfo.InvariantCulture),
                        "--max-minutos", maxMinutos.ToString(CultureInfo.InvariantCulture),
-                       "--carpeta", carpeta, "--fondo", "--preguntar-en-carpeta"]);
+                       "--carpeta", carpeta, "--fondo", "--preguntar-en-carpeta", "--lang", Lengua.Actual]);
 
         var psi = new ProcessStartInfo(o.Exe)
         {
@@ -116,7 +121,7 @@ public static class Encargos
         foreach (var (k, v) in o.Entorno) psi.Environment[k] = v;
         psi.Environment["FAENA_TAREAS"] = o.CarpetaTareas;
         psi.Environment["FAENA_HABILIDADES"] = o.CarpetaHabilidades;
-        var proc = Lanzador(psi) ?? throw new InvalidOperationException($"No se ha podido lanzar {psi.FileName}");
+        var proc = Lanzador(psi) ?? throw new InvalidOperationException(Lengua.T($"No se ha podido lanzar {psi.FileName}", $"Could not launch {psi.FileName}"));
         // La salida ya está en registro.log; se vacían las tuberías para que el hijo no se atasque,
         // y lo que no llegue al registro (un error al arrancar) se guarda aparte.
         if (psi.RedirectStandardOutput && proc.StartInfo.RedirectStandardOutput)
@@ -218,7 +223,7 @@ public static class Encargos
             var m = LineaRegistro.Match(linea);
             var (hora, texto) = m.Success ? (m.Groups[1].Value, m.Groups[2].Value) : ("", linea);
             var tipo = Tipo(texto);
-            if (tipo == "paso") { pasos++; ultimo = Regex.Replace(texto, @"^(Paso \d+|Repetido \d+/\d+): ", "").Split(" — porque ")[0]; }
+            if (tipo == "paso") { pasos++; ultimo = Regex.Replace(texto, @"^(Paso \d+|Repetido \d+/\d+|Step \d+|Replayed \d+/\d+): ", "").Split(" — porque ")[0].Split(" — because ")[0]; }
             cues.Add(new JsonObject { ["hora"] = hora, ["texto"] = texto, ["tipo"] = tipo });
         }
         if (cues.Count > 300) cues = new JsonArray(cues.Skip(cues.Count - 300).Select(c => c!.DeepClone()).ToArray());
@@ -247,18 +252,25 @@ public static class Encargos
         return detalle;
     }
 
-    /// <summary>Qué es cada línea del registro, para pintarla en la hoja de cues.</summary>
-    internal static string Tipo(string texto) => texto switch
+    /// <summary>
+    /// What each line of the log is, to paint it on the cue sheet. The log is written in the
+    /// language the job ran in, so both languages' openings are known.
+    /// </summary>
+    internal static string Tipo(string texto)
     {
-        _ when texto.StartsWith("Paso ", StringComparison.Ordinal) || texto.StartsWith("Repetido ", StringComparison.Ordinal) => "paso",
-        _ when texto.StartsWith("Turno ", StringComparison.Ordinal) => "turno",
-        _ when texto.StartsWith("Acción irreversible", StringComparison.Ordinal) || texto.StartsWith("Me he parado", StringComparison.Ordinal) => "alto",
-        _ when texto.StartsWith("Autorizado", StringComparison.Ordinal) => "permiso",
-        _ when texto.StartsWith("Terminado", StringComparison.Ordinal) => "fin",
-        _ when texto.StartsWith("Falló", StringComparison.Ordinal) || texto.StartsWith("No he podido", StringComparison.Ordinal) || texto.StartsWith("La habilidad se queda", StringComparison.Ordinal) => "fallo",
-        _ when texto.StartsWith("Uso la habilidad", StringComparison.Ordinal) || texto.StartsWith("Habilidades que", StringComparison.Ordinal) => "repertorio",
-        _ => "nota",
-    };
+        bool Empieza(params string[] xs) => xs.Any(x => texto.StartsWith(x, StringComparison.Ordinal));
+        return texto switch
+        {
+            _ when Empieza("Paso ", "Repetido ", "Step ", "Replayed ") => "paso",
+            _ when Empieza("Turno ", "Turn ") => "turno",
+            _ when Empieza("Acción irreversible", "Me he parado", "Irreversible action", "Stopped before") => "alto",
+            _ when Empieza("Autorizado", "Allowed") => "permiso",
+            _ when Empieza("Terminado", "Done:") => "fin",
+            _ when Empieza("Falló", "No he podido", "La habilidad se queda", "Failed", "Could not", "The skill stops") => "fallo",
+            _ when Empieza("Uso la habilidad", "Habilidades que", "Using the skill", "Skills that") => "repertorio",
+            _ => "nota",
+        };
+    }
 
     private static List<string> LeerLineas(string ruta)
     {
@@ -348,9 +360,9 @@ public static class Encargos
 
     private static string GuardarHabilidad(Opciones o, Habilidad h)
     {
-        if (h.Nombre.Length == 0) throw new ArgumentException("Ponle un nombre.");
+        if (h.Nombre.Length == 0) throw new ArgumentException(Lengua.T("Póngale un nombre.", "Give it a name."));
         if (File.Exists(Path.Combine(o.CarpetaHabilidades, h.Nombre + ".toml")))
-            throw new ArgumentException($"Ya hay una obra «{h.Nombre}» en el repertorio; elige otro nombre o quita la otra.");
+            throw new ArgumentException(Lengua.T($"Ya sé un oficio «{h.Nombre}»; elija otro nombre o descosa el otro.", $"I already know a trade called “{h.Nombre}”; choose another name or unstitch the other one."));
         Habilidades.Guardar(h, o.CarpetaHabilidades);
         return h.Nombre;
     }
@@ -358,12 +370,12 @@ public static class Encargos
     /// <summary>Un encargo que salió bien pasa al repertorio.</summary>
     public static string AprenderDeEncargo(Opciones o, string id, string nombre)
     {
-        var carpeta = CarpetaDe(o, id) ?? throw new ArgumentException("Ese encargo ya no existe.");
-        var informe = LeerJson(Path.Combine(carpeta, "informe.json")) ?? throw new ArgumentException("El encargo aún no ha terminado.");
-        if (Campos.Str(informe, "estado") != "hecho") throw new ArgumentException("Solo se aprende de un encargo que salió bien.");
+        var carpeta = CarpetaDe(o, id) ?? throw new ArgumentException(Lengua.T("Ese recado ya no existe.", "That errand no longer exists."));
+        var informe = LeerJson(Path.Combine(carpeta, "informe.json")) ?? throw new ArgumentException(Lengua.T("El recado aún no ha terminado.", "The errand has not finished yet."));
+        if (Campos.Str(informe, "estado") != "hecho") throw new ArgumentException(Lengua.T("Solo aprendo de un recado que salió bien.", "I only learn from an errand that went well."));
         var pasos = informe["pasos"] is JsonArray a ? a.OfType<JsonObject>().ToList() : [];
         var h = Habilidades.Aprender(pasos, nombre, Campos.Str(informe, "objetivo"), Campos.Str(informe, "inicio"),
-            Campos.Str(informe, "superficie") is { Length: > 0 } s ? s : "web", $"tarea {id}");
+            Campos.Str(informe, "superficie") is { Length: > 0 } s ? s : "web", Lengua.T($"tarea {id}", $"task {id}"));
         return GuardarHabilidad(o, h);
     }
 
@@ -374,7 +386,7 @@ public static class Encargos
     public static string AprenderDeProyecto(Opciones o, string origen, string nombre)
     {
         origen = origen.Trim().Trim('"');
-        if (origen.Length == 0) throw new ArgumentException("Dime qué proceso: la carpeta del proyecto de tramoya o su id.");
+        if (origen.Length == 0) throw new ArgumentException(Lengua.T("Dígame qué proceso: la carpeta del proyecto de tramoya o su id.", "Tell me which process: the tramoya project's folder or its id."));
         string? archivo = null;
         foreach (var carpeta in new[] { origen, o.ProyectosTramoya is { } raiz && Regex.IsMatch(origen, "^[a-z0-9-]+$") ? Path.Combine(raiz, origen) : null })
         {
@@ -383,13 +395,26 @@ public static class Encargos
             else if (File.Exists(Path.Combine(carpeta, "proyecto.json"))) archivo = Path.Combine(carpeta, "proyecto.json");
             if (archivo is not null) break;
         }
-        if (archivo is null) throw new ArgumentException("Ahí no hay ningún proyecto de tramoya (falta proyecto.json).");
-        var p = LeerJson(archivo) ?? throw new ArgumentException("El proyecto de tramoya no se puede leer.");
+        if (archivo is null) throw new ArgumentException(Lengua.T("Ahí no hay ningún proyecto de tramoya (falta proyecto.json).", "There is no tramoya project there (proyecto.json is missing)."));
+        var p = LeerJson(archivo) ?? throw new ArgumentException(Lengua.T("El proyecto de tramoya no se puede leer.", "The tramoya project cannot be read."));
         var pasos = p["pasos"] is JsonArray a ? a.OfType<JsonObject>().ToList() : [];
-        if (pasos.Count == 0) throw new ArgumentException("Ese proceso aún no tiene pasos grabados.");
+        if (pasos.Count == 0) throw new ArgumentException(Lengua.T("Ese proceso aún no tiene pasos grabados.", "That process has no recorded steps yet."));
         var inicio = Campos.Str(p, "inicio") is { Length: > 0 } i ? i : Campos.Str(p, "url");
-        var h = Habilidades.Aprender(pasos, nombre, Campos.Str(p, "nombre"), inicio, "web", $"proyecto de tramoya {Path.GetFileName(Path.GetDirectoryName(archivo))}");
+        var h = Habilidades.Aprender(pasos, nombre, Campos.Str(p, "nombre"), inicio, "web",
+            Lengua.T($"proyecto de tramoya {Path.GetFileName(Path.GetDirectoryName(archivo))}", $"tramoya project {Path.GetFileName(Path.GetDirectoryName(archivo))}"));
         return GuardarHabilidad(o, h);
+    }
+
+    /// <summary>
+    /// A trade as an Agent Skill, faena-&lt;name&gt;/SKILL.md, in the user's skills folder (or the
+    /// options' one, for the tests): the window's «Export as skill». It replaces an earlier export,
+    /// keeping a .bak, since the trade is the source.
+    /// </summary>
+    public static string ExportarSkill(Opciones o, string nombre)
+    {
+        var h = Habilidades.Cargar(o.CarpetaHabilidades).FirstOrDefault(x => string.Equals(x.Nombre, nombre, StringComparison.OrdinalIgnoreCase))
+                ?? throw new ArgumentException(Lengua.T($"No sé ningún oficio «{nombre}».", $"I know no trade called “{nombre}”."));
+        return AgentSkills.Exportar(h, o.CarpetaSkills ?? AgentSkills.Destino("user", null), Lengua.Actual, force: true);
     }
 
     public static bool Olvidar(Opciones o, string nombre)

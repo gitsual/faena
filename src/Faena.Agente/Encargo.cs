@@ -70,7 +70,8 @@ public static class Encargo
         var todos = new Dictionary<string, string>(h.Parametros, StringComparer.Ordinal);
         foreach (var (k, v) in valores)
         {
-            if (!todos.ContainsKey(k)) throw new ArgumentException($"la habilidad «{h.Nombre}» no tiene el parámetro «{k}» (tiene: {string.Join(", ", h.Parametros.Keys)})");
+            if (!todos.ContainsKey(k)) throw new ArgumentException(Lengua.T($"la habilidad «{h.Nombre}» no tiene el parámetro «{k}» (tiene: {string.Join(", ", h.Parametros.Keys)})",
+                $"the skill “{h.Nombre}” has no parameter “{k}” (it has: {string.Join(", ", h.Parametros.Keys)})"));
             todos[k] = v;
         }
         var (hechos, uso, parado) = await RepetirHabilidadAsync(sup, h, todos, opciones, log, ct).ConfigureAwait(false);
@@ -79,8 +80,9 @@ public static class Encargo
         {
             r.Ok = uso.Fallo.Length == 0 && uso.Repetidos == uso.Total;
             r.Resumen = r.Ok
-                ? $"Habilidad «{h.Nombre}» repetida entera ({uso.Total} pasos), sin modelo."
-                : ct.IsCancellationRequested ? "Se ha cancelado antes de terminar." : $"La habilidad «{h.Nombre}» se ha quedado a medias: {uso.Fallo}.";
+                ? Lengua.T($"Habilidad «{h.Nombre}» repetida entera ({uso.Total} pasos), sin modelo.", $"Skill “{h.Nombre}” replayed in full ({uso.Total} steps), without a model.")
+                : ct.IsCancellationRequested ? Lengua.T("Se ha cancelado antes de terminar.", "Cancelled before finishing.")
+                : Lengua.T($"La habilidad «{h.Nombre}» se ha quedado a medias: {uso.Fallo}.", $"The skill “{h.Nombre}” stopped halfway: {uso.Fallo}.");
             if (!r.Ok) r.Avisos.Add(r.Resumen);
             try { r.Final = sup.Donde; } catch (Exception) { }
         }
@@ -101,7 +103,8 @@ public static class Encargo
     {
         var pasos = Habilidades.Rellenar(h, valores);
         var uso = new UsoHabilidad { Nombre = h.Nombre, Valores = new(valores), Total = pasos.Count };
-        log?.Report($"Uso la habilidad «{h.Nombre}» ({pasos.Count} pasos){(valores.Count != 0 ? ": " + string.Join(", ", valores.Select(v => $"{v.Key} = «{v.Value}»")) : "")}.");
+        var conValores = valores.Count != 0 ? ": " + string.Join(", ", valores.Select(v => $"{v.Key} = {Lengua.Comillas(v.Value)}")) : "";
+        log?.Report(Lengua.T($"Uso la habilidad «{h.Nombre}» ({pasos.Count} pasos){conValores}.", $"Using the skill “{h.Nombre}” ({pasos.Count} steps){conValores}."));
         var hechos = new List<JsonObject>();
         foreach (var paso in pasos)
         {
@@ -109,7 +112,8 @@ public static class Encargo
             var desc = Observer.Str(paso, "desc");
             if (Observer.Str(paso, "tipo") == "clic" && Guardian.Categoria(Nombrado(desc)) is { } categoria)
             {
-                var peligro = new Irreversible(categoria, desc.Length != 0 ? desc : $"Pulsar {Observer.Str(paso, "selector")}", $"paso de la habilidad «{h.Nombre}»");
+                var peligro = new Irreversible(categoria, desc.Length != 0 ? desc : Lengua.T($"Pulsar {Observer.Str(paso, "selector")}", $"Click {Observer.Str(paso, "selector")}"),
+                    Lengua.T($"paso de la habilidad «{h.Nombre}»", $"step of the skill “{h.Nombre}”"));
                 if (!Guardian.Permitida(peligro, opciones.Permitidas) && !await PreguntarAsync(opciones, peligro, ct).ConfigureAwait(false))
                 {
                     var parado = new AgentResult
@@ -117,7 +121,8 @@ public static class Encargo
                         Inicio = sup.Donde,
                         Pasos = hechos,
                         Pendiente = peligro,
-                        Resumen = $"Me he parado antes de: {desc} ({Agent.Porque(peligro)}, no autorizado). Lo anterior de la habilidad está hecho.",
+                        Resumen = Lengua.T($"Me he parado antes de: {desc} ({Agent.Porque(peligro)}, no autorizado). Lo anterior de la habilidad está hecho.",
+                            $"Stopped before: {desc} ({Agent.Porque(peligro)}; not allowed). The earlier steps of the skill are done."),
                     };
                     parado.Avisos.Add(parado.Resumen);
                     try { parado.Final = sup.Donde; } catch (Exception) { }
@@ -132,13 +137,14 @@ public static class Encargo
             }
             catch (Exception e) when (!ct.IsCancellationRequested)
             {
-                uso.Fallo = $"el paso {hechos.Count + 1} («{desc}») no se ha podido repetir: {Observer.Recortar((e.Message ?? "").TrimEnd().Split('\n')[0], 160)}";
-                log?.Report($"La habilidad se queda aquí: {uso.Fallo.TrimEnd('.')}.");
+                var motivo = Observer.Recortar((e.Message ?? "").TrimEnd().Split('\n')[0], 160);
+                uso.Fallo = Lengua.T($"el paso {hechos.Count + 1} («{desc}») no se ha podido repetir: {motivo}", $"step {hechos.Count + 1} (“{desc}”) could not be replayed: {motivo}");
+                log?.Report(Lengua.T($"La habilidad se queda aquí: {uso.Fallo.TrimEnd('.')}.", $"The skill stops here: {uso.Fallo.TrimEnd('.')}."));
                 break;
             }
             hechos.Add(paso);
             uso.Repetidos++;
-            log?.Report($"Repetido {uso.Repetidos}/{pasos.Count}: {desc}");
+            log?.Report(Lengua.T($"Repetido {uso.Repetidos}/{pasos.Count}: {desc}", $"Replayed {uso.Repetidos}/{pasos.Count}: {desc}"));
         }
         return (hechos, uso, null);
     }
@@ -149,15 +155,15 @@ public static class Encargo
         if (forzada is { Length: > 0 })
         {
             var h = habilidades.FirstOrDefault(x => string.Equals(x.Nombre, forzada, StringComparison.OrdinalIgnoreCase))
-                    ?? throw new ArgumentException($"no hay ninguna habilidad «{forzada}»");
+                    ?? throw new ArgumentException(Lengua.T($"no hay ninguna habilidad «{forzada}»", $"there is no skill “{forzada}”"));
             // Aunque venga elegida, los valores salen del objetivo.
             return await Habilidades.ElegirAsync(objetivo, [h], backend, ct).ConfigureAwait(false) ?? new Eleccion(h, h.Parametros);
         }
         var candidatas = Habilidades.Candidatas(objetivo, habilidades, sup.Tipo, sup.Donde);
         if (candidatas.Count == 0) return null;
-        log?.Report($"Habilidades que podrían servir: {string.Join(", ", candidatas.Select(c => c.Nombre))}.");
+        log?.Report(Lengua.T($"Habilidades que podrían servir: {string.Join(", ", candidatas.Select(c => c.Nombre))}.", $"Skills that might fit: {string.Join(", ", candidatas.Select(c => c.Nombre))}."));
         var eleccion = await Habilidades.ElegirAsync(objetivo, candidatas, backend, ct).ConfigureAwait(false);
-        if (eleccion is null) log?.Report("Ninguna encaja del todo: razono desde cero.");
+        if (eleccion is null) log?.Report(Lengua.T("Ninguna encaja del todo: razono desde cero.", "None fits exactly: reasoning from scratch."));
         return eleccion;
     }
 
@@ -168,12 +174,14 @@ public static class Encargo
         catch (Exception) { return false; }
     }
 
-    /// <summary>El nombre del control que sale en la descripción de un paso («Pulsa el botón «Enviar»» → «Enviar»).</summary>
-    internal static string Nombrado(string desc)
+    /// <summary>
+    /// The name of the control in a step's description, in either language: «Pulsa el botón «Enviar»»
+    /// → «Enviar», «Click the “Send” button» → «Send». Without quotes, the whole description.
+    /// </summary>
+    public static string Nombrado(string desc)
     {
-        var fin = desc.LastIndexOf('»');
-        var ini = fin > 0 ? desc.LastIndexOf('«', fin) : -1;
-        return ini >= 0 ? desc[(ini + 1)..fin] : desc;
+        var citas = Lengua.Citas(desc);
+        return citas.Count != 0 ? citas[^1] : desc;
     }
 
     // ------------------------------------------------------------------ informe
@@ -187,6 +195,7 @@ public static class Encargo
             ["objetivo"] = objetivo,
             ["superficie"] = superficie,
             ["estado"] = Estado(a),
+            ["idioma"] = Lengua.Actual,
             ["ok"] = a.Ok,
             ["resumen"] = a.Resumen,
             ["inicio"] = a.Inicio,
@@ -213,55 +222,70 @@ public static class Encargo
         return o;
     }
 
-    /// <summary>«hecho», «pendiente» (parado ante algo irreversible) o «sin terminar».</summary>
+    /// <summary>
+    /// «hecho», «pendiente» (stopped before something irreversible) or «sin terminar». These are
+    /// data (informe.json, the window, scripts that read it) and stay the same in every language;
+    /// <see cref="EstadoTexto"/> says them for a person.
+    /// </summary>
     public static string Estado(AgentResult a) => a.Ok ? "hecho" : a.Pendiente is not null ? "pendiente" : "sin terminar";
 
-    /// <summary>El informe para una persona: qué se pidió, cómo acabó, qué falta por autorizar y cada paso.</summary>
+    /// <summary>The state in the interface's language: done, pending, unfinished.</summary>
+    public static string EstadoTexto(string estado, string? lang = null) => estado switch
+    {
+        "hecho" => Lengua.T("hecho", "done", lang),
+        "pendiente" => Lengua.T("pendiente", "pending", lang),
+        _ => Lengua.T("sin terminar", "unfinished", lang),
+    };
+
+    /// <summary>The report for a person, in the interface's language: what was asked, how it ended, what is left to allow and each step.</summary>
     public static string InformeMarkdown(string objetivo, string superficie, ResultadoEncargo r)
     {
+        static string T(string es, string en) => Lengua.T(es, en);
         var a = r.Agente;
         var sb = new StringBuilder();
-        sb.Append("# Tarea: ").Append(objetivo).Append("\n\n");
+        sb.Append(T("# Tarea: ", "# Task: ")).Append(objetivo).Append("\n\n");
         var estado = Estado(a) switch
         {
-            "hecho" => "✅ Hecha",
-            "pendiente" => "⏸️ Parada: falta tu autorización",
-            _ => "⚠️ Sin terminar",
+            "hecho" => T("✅ Hecha", "✅ Done"),
+            "pendiente" => T("⏸️ Parada: falta tu autorización", "⏸️ Stopped: waiting for your permission"),
+            _ => T("⚠️ Sin terminar", "⚠️ Unfinished"),
         };
-        sb.Append("**Estado:** ").Append(estado).Append("  \n");
-        sb.Append("**Dónde:** ").Append(superficie == "escritorio" ? "aplicación " : "").Append(a.Inicio).Append(a.Final.Length != 0 && a.Final != a.Inicio ? $" → {a.Final}" : "").Append("  \n");
-        sb.Append(string.Create(CultureInfo.InvariantCulture, $"**Tiempo:** {a.Duracion.TotalSeconds:0} s, {a.Turnos} turnos del modelo, {a.Pasos.Count} pasos\n\n"));
+        sb.Append(T("**Estado:** ", "**Status:** ")).Append(estado).Append("  \n");
+        sb.Append(T("**Dónde:** ", "**Where:** ")).Append(superficie == "escritorio" ? T("aplicación ", "application ") : "").Append(a.Inicio)
+          .Append(a.Final.Length != 0 && a.Final != a.Inicio ? $" → {a.Final}" : "").Append("  \n");
+        sb.Append(string.Create(CultureInfo.InvariantCulture, $"{T("**Tiempo:**", "**Time:**")} {a.Duracion.TotalSeconds:0} s, {a.Turnos} {T("turnos del modelo", "model turns")}, {a.Pasos.Count} {T("pasos", "steps")}\n\n"));
         if (a.Resumen.Length != 0) sb.Append("> ").Append(a.Resumen.Replace("\n", "\n> ")).Append("\n\n");
         if (a.Pendiente is { } p)
         {
-            sb.Append("## Pendiente de autorizar\n\n");
-            sb.Append("- **Acción:** ").Append(p.Descripcion).Append('\n');
-            sb.Append("- **Tipo:** ").Append(p.Categoria).Append('\n');
-            if (p.Motivo.Length != 0) sb.Append("- **Por qué:** ").Append(p.Motivo).Append('\n');
-            sb.Append("\nPara hacerla, repite la tarea con `--permitir ").Append(p.Categoria).Append("` (o hazla tú a mano).\n\n");
+            sb.Append(T("## Pendiente de autorizar\n\n", "## Waiting for permission\n\n"));
+            sb.Append(T("- **Acción:** ", "- **Action:** ")).Append(p.Descripcion).Append('\n');
+            sb.Append(T("- **Tipo:** ", "- **Kind:** ")).Append(Guardian.NombreCategoria(p.Categoria)).Append('\n');
+            if (p.Motivo.Length != 0) sb.Append(T("- **Por qué:** ", "- **Why:** ")).Append(p.Motivo).Append('\n');
+            sb.Append(T("\nPara hacerla, repite la tarea con `--permitir ", "\nTo do it, run the task again with `--allow "))
+              .Append(Guardian.NombreCategoria(p.Categoria)).Append(T("` (o hazla tú a mano).\n\n", "` (or do it yourself by hand).\n\n"));
         }
         if (r.Habilidad is { } h)
         {
-            sb.Append("## Habilidad usada\n\n");
-            sb.Append($"«{h.Nombre}»: {h.Repetidos} de {h.Total} pasos repetidos tal cual");
-            if (h.Valores.Count != 0) sb.Append(" con ").Append(string.Join(", ", h.Valores.Select(v => $"{v.Key} = «{v.Value}»")));
+            sb.Append(T("## Habilidad usada\n\n", "## Skill used\n\n"));
+            sb.Append(T($"«{h.Nombre}»: {h.Repetidos} de {h.Total} pasos repetidos tal cual", $"“{h.Nombre}”: {h.Repetidos} of {h.Total} steps replayed as they were"));
+            if (h.Valores.Count != 0) sb.Append(T(" con ", " with ")).Append(string.Join(", ", h.Valores.Select(v => $"{v.Key} = {Lengua.Comillas(v.Value)}")));
             sb.Append(".\n");
-            if (h.Fallo.Length != 0) sb.Append("Se dejó de repetir porque ").Append(h.Fallo).Append("; siguió el modelo.\n");
-            if (h.Reparada) sb.Append("La habilidad se ha reescrito con los pasos que han funcionado esta vez.\n");
+            if (h.Fallo.Length != 0) sb.Append(T("Se dejó de repetir porque ", "It stopped replaying because ")).Append(h.Fallo).Append(T("; siguió el modelo.\n", "; the model went on.\n"));
+            if (h.Reparada) sb.Append(T("La habilidad se ha reescrito con los pasos que han funcionado esta vez.\n", "The skill has been rewritten with the steps that worked this time.\n"));
             sb.Append('\n');
         }
-        sb.Append("## Pasos\n\n");
-        if (a.Pasos.Count == 0) sb.Append("(ninguno)\n");
+        sb.Append(T("## Pasos\n\n", "## Steps\n\n"));
+        if (a.Pasos.Count == 0) sb.Append(T("(ninguno)\n", "(none)\n"));
         for (var i = 0; i < a.Pasos.Count; i++)
             sb.Append(i + 1).Append(". ").Append(Observer.Str(a.Pasos[i], "desc")).Append('\n');
         if (a.Avisos.Count != 0)
         {
-            sb.Append("\n## Avisos\n\n");
+            sb.Append(T("\n## Avisos\n\n", "\n## Warnings\n\n"));
             foreach (var x in a.Avisos) sb.Append("- ").Append(x).Append('\n');
         }
         if (a.Capturas.Count != 0)
         {
-            sb.Append("\n## Capturas\n\n");
+            sb.Append(T("\n## Capturas\n\n", "\n## Screenshots\n\n"));
             foreach (var c in a.Capturas) sb.Append("- [").Append(Path.GetFileName(c)).Append("](capturas/").Append(Path.GetFileName(c)).Append(")\n");
         }
         return sb.ToString();

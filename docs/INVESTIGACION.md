@@ -1,89 +1,91 @@
-# Investigación: agentes que manejan aplicaciones en local (28-10-2026)
+*[Leer en español](INVESTIGACION.es.md)*
 
-Hecha con un flujo de investigación: 5 frentes de búsqueda, 23 fuentes leídas, 106 afirmaciones extraídas, 25 verificadas por 3 votos adversarios (21 confirmadas, 4 refutadas).
+# Research: agents that drive applications locally (2026-10-28)
 
-## Resumen
+Done with a research workflow: 5 search fronts, 23 sources read, 106 claims extracted, 25 verified by 3 adversarial votes (21 confirmed, 4 refuted).
 
-Lo verificado apunta a cinco técnicas que faena puede adoptar. (1) Representar la página como un snapshot de texto del árbol de accesibilidad con refs efímeras (Playwright MCP): sale barato en tokens, apunta al elemento exacto y, cuando una ref caduca, da un error explícito que sirve para recuperarse. A eso se suman vistas destiladas según la tarea y una «observación del cambio» después de cada acción (Agent-E). (2) En escritorio Windows, el patrón más fuerte es el híbrido de UFO2. Primero, la detección de controles combina UIA con visión (OmniParser): con o1 en OSWorld-W, 28,6 % frente a 24,5 % solo con UIA y 14,3 % solo con visión. Segundo, se prefieren las APIs nativas y la GUI queda como respaldo: +6,1 a +8,2 puntos y, con o1, de 16,0 a 6,6 pasos. Tercero, se puede ejecutar en un escritorio anidado para no pelear con el usuario por el ratón. CoAct-1 confirma que combinar código y GUI supera a cualquiera de los dos por separado (60,76 % frente a 50,68 % y 35,73 % en OSWorld). (3) En memoria procedimental, la tendencia de 2025 es representar las habilidades como programas parametrizados (ASI, SkillWeaver) y no como notas de texto. Una habilidad solo entra en la biblioteca después de verificarse: un juez la da por resuelta, se llama a la habilidad y cada llamada cambia el entorno. Con eso, SkillWeaver mejora entre un 31,8 % y un 39,8 % relativo. La caché de Stagehand repite los pasos sin LLM y, ante un fallo de caché, vuelve a llamar al modelo; es el modelo directo para las habilidades TOML de faena. Sobre seguridad y human-in-the-loop (4) y sobre modelos locales pequeños para GUI (5), ninguna afirmación pasó la verificación, así que esas recomendaciones quedan sin respaldo en este informe.
+## Summary
 
-## Hallazgos verificados
+What was verified points to five techniques faena can adopt. (1) Represent the page as a text snapshot of the accessibility tree with ephemeral refs (Playwright MCP): it is cheap in tokens, points at the exact element and, when a ref expires, gives an explicit error that can be used to recover. On top of that, task-dependent distilled views and an "observation of the change" after each action (Agent-E). (2) On the Windows desktop, the strongest pattern is UFO2's hybrid. First, control detection combines UIA with vision (OmniParser): with o1 on OSWorld-W, 28.6 % versus 24.5 % with UIA only and 14.3 % with vision only. Second, native APIs are preferred and the GUI is the fallback: +6.1 to +8.2 points and, with o1, from 16.0 to 6.6 steps. Third, it can run on a nested desktop so as not to fight the user for the mouse. CoAct-1 confirms that combining code and GUI beats either one alone (60.76 % versus 50.68 % and 35.73 % on OSWorld). (3) In procedural memory, the 2025 trend is to represent skills as parameterized programs (ASI, SkillWeaver) rather than text notes. A skill only enters the library after it is verified: a judge considers the task solved, the skill is called and every call changes the environment. With that, SkillWeaver improves by 31.8 % to 39.8 % relative. Stagehand's cache replays the steps without an LLM and, on a cache miss, calls the model again; it is the direct model for faena's TOML skills. On safety and human-in-the-loop (4) and on small local models for GUIs (5), no claim passed verification, so those recommendations remain unsupported in this report.
 
-### (high, voto 3-0 (x3))
+## Verified findings
 
-Representación de la página web: usar un snapshot de texto del árbol de accesibilidad donde cada nodo expuesto lleva una ref efímera (e5, f2e7 dentro de iframes). La ref es única dentro del snapshot y vale hasta que la página cambie. Las acciones aceptan una ref (lo preferido) o un selector, y una ref caducada devuelve un error explícito («Ref not found... Try capturing new snapshot») que sirve de señal de recuperación. Frente a las capturas, cuesta menos tokens, apunta al elemento exacto en vez de a coordenadas aproximadas y no necesita modelo de visión. Recomendación para faena: que el bucle observar→decidir JSON reciba refs de un snapshot ARIA de Playwright (en .NET, Locator.AriaSnapshotAsync o equivalente). Si una ref caduca, hay que volver a hacer el snapshot automáticamente en lugar de fallar. La captura queda solo para canvas o gráficos.
+### (high, vote 3-0 (x3))
 
-Fuentes: https://playwright.dev/mcp/snapshots
+Web page representation: use a text snapshot of the accessibility tree where each exposed node carries an ephemeral ref (e5, f2e7 inside iframes). The ref is unique within the snapshot and is valid until the page changes. Actions accept a ref (preferred) or a selector, and an expired ref returns an explicit error ("Ref not found... Try capturing new snapshot") that serves as a recovery signal. Compared with screenshots, it costs fewer tokens, points at the exact element instead of approximate coordinates and needs no vision model. Recommendation for faena: have the observe→decide JSON loop receive refs from a Playwright ARIA snapshot (in .NET, Locator.AriaSnapshotAsync or equivalent). If a ref expires, take the snapshot again automatically instead of failing. Screenshots are kept only for canvases or graphics.
 
-Matiz: Tres afirmaciones de la documentación oficial de Playwright MCP, todas 3-0. Matiz: en páginas grandes el snapshot se encarece y se acumula en el contexto a lo largo de varios pasos; hay informes de unos 114k tokens en Salesforce. La propia documentación recomienda limitarlo con depth/target o browser_find.
+Sources: https://playwright.dev/mcp/snapshots
 
-### (medium, voto 3-0 (x3))
+Caveat: Three claims from the official Playwright MCP documentation, all 3-0. Caveat: on large pages the snapshot gets expensive and piles up in the context over several steps; there are reports of about 114k tokens on Salesforce. The documentation itself recommends limiting it with depth/target or browser_find.
 
-DOM destilado según la tarea y observación del cambio después de cada acción (Agent-E). Hay tres vistas del DOM: text_only, input_fields y all_fields. El agente elige la que encaja con el paso y cambia a otra si esa no funciona. Cada acción devuelve en palabras qué cambió (por ejemplo, que se abrió un popup), detectado por código con MutationObserver y aria-expanded, sin LLM. A diferencia de Reflexion, esto ocurre en cada acción y no solo tras un fallo. Agent-E llegó a un 73,1 % en WebVoyager (643 tareas), frente al 52,6 % de WILBUR y el 57,1 % del agente WebVoyager, aunque se quedó en un 27,3 % en Booking y un 35,7 % en Google Flights. Recomendación: añadir a la observación de faena un campo de diff o cambio calculado sin modelo (en web, nodos nuevos o eliminados en el árbol ARIA; en escritorio, eventos UIA de StructureChanged o ventanas nuevas). Y ofrecer al modelo vistas filtradas (solo campos de entrada o solo texto) para reducir tokens con qwen3-coder local.
+### (medium, vote 3-0 (x3))
 
-Fuentes: https://arxiv.org/html/2407.13032v1
+Task-dependent distilled DOM and observation of the change after each action (Agent-E). There are three DOM views: text_only, input_fields and all_fields. The agent picks the one that fits the step and switches to another if it does not work. Each action reports in words what changed (for example, that a popup opened), detected by code with MutationObserver and aria-expanded, without an LLM. Unlike Reflexion, this happens on every action and not only after a failure. Agent-E reached 73.1 % on WebVoyager (643 tasks), versus 52.6 % for WILBUR and 57.1 % for the WebVoyager agent, although it stayed at 27.3 % on Booking and 35.7 % on Google Flights. Recommendation: add to faena's observation a diff or change field computed without a model (on the web, nodes added to or removed from the ARIA tree; on the desktop, UIA StructureChanged events or new windows). And offer the model filtered views (input fields only or text only) to reduce tokens with local qwen3-coder.
 
-Matiz: Una sola fuente primaria, de julio de 2024 (anterior a la ventana 2025-2026). Las cifras son autoinformadas y ya están superadas, aunque las técnicas siguen siendo válidas. Votos 3-0.
+Sources: https://arxiv.org/html/2407.13032v1
 
-### (high, voto 3-0 (x2))
+Caveat: A single primary source, from July 2024 (before the 2025-2026 window). The figures are self-reported and already surpassed, although the techniques are still valid. Votes 3-0.
 
-Escritorio Windows: detección híbrida de controles UIA + visión. UFO2 fusiona los metadatos de UIA con OmniParser-v2 para los controles no estándar. Con o1 en OSWorld-W: solo UIA, 24,5 %; solo OmniParser, 14,3 %; híbrido, 28,6 %. En WAA con o1: 27,9 % frente a 25,3 % y 20,8 %. El híbrido recupera el 9,86 % de los fallos de UIA. Recomendación: mantener UIA como vía principal en faena y añadir un respaldo visual (un parser de capturas o un VLM local) solo cuando UIA no exponga el control, por ejemplo cuando un elemento personalizado tiene nombre vacío o el árbol está vacío.
+### (high, vote 3-0 (x2))
 
-Fuentes: https://arxiv.org/abs/2504.14603v2, https://microsoft.github.io/UFO/ufo2/overview
+Windows desktop: hybrid UIA + vision control detection. UFO2 merges UIA metadata with OmniParser-v2 for non-standard controls. With o1 on OSWorld-W: UIA only, 24.5 %; OmniParser only, 14.3 %; hybrid, 28.6 %. On WAA with o1: 27.9 % versus 25.3 % and 20.8 %. The hybrid recovers 9.86 % of UIA's failures. Recommendation: keep UIA as faena's main path and add a visual fallback (a screenshot parser or a local VLM) only when UIA does not expose the control, for example when a custom element has an empty name or the tree is empty.
 
-Matiz: El artículo y la documentación oficial de Microsoft coinciden, 3-0. Matices: con GPT-4o en WAA, la visión sola (26,6 %) superó a UIA sola (23,4 %), y en OSWorld-W hubo empate (22,4 %). El modo híbrido es configurable y no viene activado por defecto (control_backend: uia).
+Sources: https://arxiv.org/abs/2504.14603v2, https://microsoft.github.io/UFO/ufo2/overview
 
-### (high, voto 3-0 (x4))
+Caveat: The paper and Microsoft's official documentation agree, 3-0. Caveats: with GPT-4o on WAA, vision alone (26.6 %) beat UIA alone (23.4 %), and on OSWorld-W it was a tie (22.4 %). The hybrid mode is configurable and is not on by default (control_backend: uia).
 
-Acción híbrida API + GUI: prioridad a la API nativa y la GUI como respaldo. UFO2 usa xlwings para Excel, win32com para Outlook y python-pptx para PowerPoint, y solo recurre a la GUI cuando ninguna API cubre el paso. En 27 tareas ofimáticas de OSWorld: con GPT-4o, del 16,3 % al 22,4 %; con o1, del 16,3 % al 24,5 %, y de 16,0 a 6,6 pasos de media. CoAct-1 (Salesforce, 2025-2026) generaliza la idea: un orquestador reparte cada subtarea entre un operador GUI (VLM) y un programador que escribe y ejecuta Python o Bash. En OSWorld: solo programador, 35,73 % (1,14 pasos); solo GUI, 50,68 % (11,20 pasos); combinado, 60,76 % (10,15 pasos). Recomendación: añadir a faena un tipo de acción «api» o «script», con COM/Office Interop desde C# o PowerShell en un entorno restringido, que el modelo pueda elegir antes que la GUI. Debe pasar por el guardián de irreversibles igual que las acciones de GUI.
+### (high, vote 3-0 (x4))
 
-Fuentes: https://arxiv.org/abs/2504.14603v2, https://microsoft.github.io/UFO/ufo2/overview, https://arxiv.org/pdf/2508.03923v3
+Hybrid API + GUI action: priority to the native API, with the GUI as fallback. UFO2 uses xlwings for Excel, win32com for Outlook and python-pptx for PowerPoint, and only falls back to the GUI when no API covers the step. On 27 OSWorld office tasks: with GPT-4o, from 16.3 % to 22.4 %; with o1, from 16.3 % to 24.5 %, and from 16.0 to 6.6 steps on average. CoAct-1 (Salesforce, 2025-2026) generalizes the idea: an orchestrator assigns each subtask either to a GUI operator (VLM) or to a programmer that writes and runs Python or Bash. On OSWorld: programmer only, 35.73 % (1.14 steps); GUI only, 50.68 % (11.20 steps); combined, 60.76 % (10.15 steps). Recommendation: add to faena an "api" or "script" action type, with COM/Office Interop from C# or PowerShell in a restricted environment, that the model can choose before the GUI. It must go through the irreversible-action guard just like GUI actions.
 
-Matiz: Dos sistemas independientes (Microsoft y Salesforce) llegan a la misma conclusión, 3-0. Matices: muestras pequeñas (27 tareas y 12 APIs hechas a mano), resultados medidos por los propios autores, y CoAct-1 evaluado en Ubuntu, no en Windows.
+Sources: https://arxiv.org/abs/2504.14603v2, https://microsoft.github.io/UFO/ufo2/overview, https://arxiv.org/pdf/2508.03923v3
 
-### (medium, voto 3-0 (x2))
+Caveat: Two independent systems (Microsoft and Salesforce) reach the same conclusion, 3-0. Caveats: small samples (27 tasks and 12 hand-written APIs), results measured by the authors themselves, and CoAct-1 evaluated on Ubuntu, not Windows.
 
-Benchmarks de escritorio Windows. UFO2 alcanza un 27,9 % en WindowsAgentArena y un 28,6 % en OSWorld-W con GPT-4o (30,5 % y 32,7 % con o1). Las líneas base: Operator, 20,8 % y 14,3 %; UFO original, 19,5 % y 12,2 %; Agent S, 18,2 % y 12,2 %; NAVI, 13,3 % y 10,2 %. Todos limitados a 30 pasos y medidos por los autores. Windows Agent Arena (ICML 2025) tiene más de 150 tareas (154) en un Windows real y es el banco natural para evaluar faena.
+### (medium, vote 3-0 (x2))
 
-Fuentes: https://arxiv.org/abs/2504.14603v2, https://icml.cc/virtual/2025/poster/45035
+Windows desktop benchmarks. UFO2 reaches 27.9 % on WindowsAgentArena and 28.6 % on OSWorld-W with GPT-4o (30.5 % and 32.7 % with o1). The baselines: Operator, 20.8 % and 14.3 %; original UFO, 19.5 % and 12.2 %; Agent S, 18.2 % and 12.2 %; NAVI, 13.3 % and 10.2 %. All limited to 30 steps and measured by the authors. Windows Agent Arena (ICML 2025) has over 150 tasks (154) on real Windows and is the natural benchmark for evaluating faena.
 
-Matiz: Las fuentes son primarias, pero las cifras son autoinformadas y de abril de 2025, así que probablemente ya están superadas. Se refutó la afirmación de que el mejor agente de WAA llega al 19,5 % frente al 74,5 % humano.
+Sources: https://arxiv.org/abs/2504.14603v2, https://icml.cc/virtual/2025/poster/45035
 
-### (medium, voto 3-0)
+Caveat: The sources are primary, but the figures are self-reported and from April 2025, so they have probably been surpassed. The claim that the best WAA agent reaches 19.5 % versus 74.5 % for humans was refuted.
 
-Ejecución en segundo plano. UFO2 ejecuta el agente en un escritorio virtual anidado (Picture-in-Picture mediante un Remote Desktop en loopback), de modo que el usuario sigue trabajando mientras el agente automatiza, sin competir por el ratón ni el teclado. Recomendación: estudiarlo para que faena funcione sin bloquear al usuario. Una sesión RDP local hacia el mismo equipo tiene su propio escritorio interactivo, que UIA puede manejar.
+### (medium, vote 3-0)
 
-Fuentes: https://microsoft.github.io/UFO/ufo2/overview
+Running in the background. UFO2 runs the agent on a nested virtual desktop (Picture-in-Picture through a loopback Remote Desktop), so the user keeps working while the agent automates, without competing for mouse or keyboard. Recommendation: study it so that faena can work without blocking the user. A local RDP session to the same machine has its own interactive desktop, which UIA can drive.
 
-Matiz: Solo lo confirma la documentación de UFO. El README de GitHub no menciona PiP, y no consta si viene activado por defecto ni qué configuración necesita.
+Sources: https://microsoft.github.io/UFO/ufo2/overview
 
-### (medium, voto 3-0 (x2))
+Caveat: Only UFO's documentation confirms it. The GitHub README does not mention PiP, and it is not stated whether it is on by default or what configuration it needs.
 
-Caché de acciones y repetición sin LLM (Stagehand v3), equivalente directo a las habilidades TOML. Con cacheDir, la primera ejecución guarda cada paso de act() y agent(), y las siguientes los repiten sin llamar al LLM ni gastar tokens, tanto en local como en Browserbase. En la caché de servidor, la clave combina la instrucción, el contenido o la estructura de la página, la URL y las opciones. Si la página cambia, la clave no coincide, se vuelve a llamar al LLM y la entrada nueva sirve para las siguientes ejecuciones, lo que en la práctica es autocuración. Recomendación: guardar en cada paso TOML una huella del estado esperado (hash del subárbol ARIA o UIA alrededor del objetivo, URL normalizada o título de ventana). Al repetir, si la huella no coincide o el localizador falla, invocar al modelo solo para ese paso, reescribir el paso en el TOML y continuar.
+### (medium, vote 3-0 (x2))
 
-Fuentes: https://docs.stagehand.dev/v3/best-practices/caching.md
+Action cache and replay without an LLM (Stagehand v3), a direct equivalent of the TOML skills. With cacheDir, the first run saves each step of act() and agent(), and later runs replay them without calling the LLM or spending tokens, both locally and on Browserbase. In the server cache, the key combines the instruction, the page's content or structure, the URL and the options. If the page changes, the key does not match, the LLM is called again and the new entry serves the following runs, which in practice is self-healing. Recommendation: store in each TOML step a fingerprint of the expected state (hash of the ARIA or UIA subtree around the target, normalized URL or window title). When replaying, if the fingerprint does not match or the locator fails, call the model only for that step, rewrite the step in the TOML and continue.
 
-Matiz: Documentación oficial, 3-0. Pero el reintento automático con LLM solo está documentado para la caché de servidor de Browserbase; en la caché local hay que borrarla a mano. Se refutó (0-3) que la clave use los nombres de las variables y no sus valores, así que no se puede afirmar que una entrada sirva para varios parámetros.
+Sources: https://docs.stagehand.dev/v3/best-practices/caching.md
 
-### (high, voto 3-0 (x4))
+Caveat: Official documentation, 3-0. But automatic LLM retry is only documented for Browserbase's server cache; the local cache has to be cleared by hand. It was refuted (0-3) that the key uses the variables' names rather than their values, so it cannot be claimed that one entry serves several parameters.
 
-Memoria procedimental: habilidades como programas parametrizados y verificados. En ASI (CMU, 2025) las habilidades son funciones Python con parámetros y docstring que encapsulan primitivas (click, fill, hover), por ejemplo search_product(name: str). Tienen de 2 a 5 pasos, pueden llamar a otras habilidades y entran en el espacio de acciones del agente, a diferencia del texto libre de AWM. Una habilidad solo entra en la biblioteca si, al volver a ejecutar la trayectoria reescrita, (1) un juez LLM da la tarea por resuelta, (2) se llama al menos a una habilidad nueva y (3) cada llamada cambia el entorno. SkillWeaver (abril de 2025) propone habilidades, las practica y las destila en APIs, con mejoras relativas del 31,8 % en WebArena y del 39,8 % en webs reales. Recomendación: exponer las habilidades TOML de faena como acciones invocables por el modelo (skill: nombre con parámetros y una descripción). Validarlas antes de guardarlas con una repetición más un juez más la comprobación de que cada paso cambió el estado. Y permitir que se compongan unas con otras.
+### (high, vote 3-0 (x4))
 
-Fuentes: https://arxiv.org/abs/2504.06821, https://arxiv.org/abs/2504.07079
+Procedural memory: skills as parameterized, verified programs. In ASI (CMU, 2025) skills are Python functions with parameters and a docstring that wrap primitives (click, fill, hover), for example search_product(name: str). They have 2 to 5 steps, can call other skills and enter the agent's action space, unlike AWM's free text. A skill only enters the library if, when the rewritten trajectory is run again, (1) an LLM judge considers the task solved, (2) at least one new skill is called and (3) every call changes the environment. SkillWeaver (April 2025) proposes skills, practises them and distils them into APIs, with relative improvements of 31.8 % on WebArena and 39.8 % on real websites. Recommendation: expose faena's TOML skills as actions the model can call (skill: name with parameters and a description). Validate them before saving them with a replay plus a judge plus the check that every step changed the state. And allow them to be composed.
 
-Matiz: Dos artículos primarios e independientes de 2025, 3-0. Cifras medidas por los autores; las ganancias relativas sobre líneas base bajas equivalen a menos puntos absolutos. Se refutó (1-2) la transferencia de un agente fuerte a uno débil de hasta un 54,3 %, así que no está demostrado que construir habilidades con Claude y repetirlas con qwen local funcione igual de bien.
+Sources: https://arxiv.org/abs/2504.06821, https://arxiv.org/abs/2504.07079
 
-## Limitaciones
+Caveat: Two independent primary papers from 2025, 3-0. Figures measured by the authors; relative gains over low baselines amount to fewer absolute points. The transfer from a strong agent to a weak one of up to 54.3 % was refuted (1-2), so it has not been shown that building skills with Claude and replaying them with local qwen works equally well.
 
-Ninguna afirmación verificada cubre la seguridad y el human-in-the-loop (inyección de prompts desde páginas, sandboxing, confirmación de acciones sensibles) ni los modelos locales pequeños para GUI (UI-TARS, Qwen2.5/3-VL, OpenCUA, GUI-Actor) con sus cifras. Esas dos partes de la pregunta (puntos 4 y 5) siguen sin respaldo verificado, y cualquier recomendación sobre ellas tendría que salir de otra investigación. Tampoco hay afirmaciones verificadas sobre browser-use, Skyvern, LaVague, Nanobrowser, Agent S2, OS-Copilot, Windows-MCP ni el uso de ordenador de Claude u OpenAI, salvo Operator como línea base. Casi todas las cifras las publican los propios autores en sus artículos o documentación, con muestras pequeñas (27 tareas ofimáticas, unas 154 tareas de WAA). Varias son de 2024 o principios de 2025 (Agent-E, julio de 2024; UFO2, abril de 2025) y el estado del arte avanza rápido. Se refutaron cuatro afirmaciones: la caché de Stagehand con clave por nombre de variable, el 19,5 % frente al 74,5 % humano en WAA, la comparación de CoAct-1 con Agent S2.5 y GTA-1, y la transferencia de habilidades a modelos débiles (54,3 %). CoAct-1 y SkillWeaver se evaluaron en Linux o en la web, no en Windows, así que su aplicación a faena es por analogía.
+## Limitations
 
-## Preguntas abiertas
+No verified claim covers safety and human-in-the-loop (prompt injection from pages, sandboxing, confirmation of sensitive actions) or small local models for GUIs (UI-TARS, Qwen2.5/3-VL, OpenCUA, GUI-Actor) with their figures. Those two parts of the question (points 4 and 5) remain without verified support, and any recommendation on them would have to come from further research. Nor are there verified claims about browser-use, Skyvern, LaVague, Nanobrowser, Agent S2, OS-Copilot, Windows-MCP or Claude's or OpenAI's computer use, except Operator as a baseline. Almost all figures are published by the authors themselves in their papers or documentation, with small samples (27 office tasks, about 154 WAA tasks). Several are from 2024 or early 2025 (Agent-E, July 2024; UFO2, April 2025) and the state of the art moves fast. Four claims were refuted: Stagehand's cache keyed by variable name, the 19.5 % versus 74.5 % for humans on WAA, the comparison of CoAct-1 with Agent S2.5 and GTA-1, and the transfer of skills to weak models (54.3 %). CoAct-1 and SkillWeaver were evaluated on Linux or the web, not on Windows, so applying them to faena is by analogy.
 
-- ¿Qué modelo local pequeño (UI-TARS, Qwen3-VL u OpenCUA de 7 a 32B) rinde mejor en WindowsAgentArena u OSWorld sobre hardware de consumo, y puede sustituir a qwen3-coder:30b como respaldo visual cuando UIA no expone el control?
-- ¿Qué defensas concretas contra la inyección de prompts desde el contenido de páginas o ventanas, y qué políticas de confirmación, usan los agentes de 2025-2026 (Operator, uso de ordenador de Claude, browser-use), y cuáles se pueden llevar al guardián de faena?
-- ¿Funcionan las habilidades aprendidas con un modelo fuerte (Claude) al repetirlas o repararlas con un modelo local débil? La afirmación de transferencia de SkillWeaver se refutó.
-- ¿Cómo mantener una huella estable para invalidar la caché de habilidades en UIA y en ARIA sin que el estado de ejecución, cambiante, provoque fallos de caché constantes?
+## Open questions
 
-## Refutadas
+- Which small local model (UI-TARS, Qwen3-VL or OpenCUA, 7 to 32B) performs best on WindowsAgentArena or OSWorld on consumer hardware, and can it replace qwen3-coder:30b as a visual fallback when UIA does not expose the control?
+- What concrete defences against prompt injection from page or window content, and what confirmation policies, do the agents of 2025-2026 use (Operator, Claude's computer use, browser-use), and which of them can be brought into faena's guard?
+- Do skills learned with a strong model (Claude) work when replayed or repaired with a weak local model? SkillWeaver's transfer claim was refuted.
+- How to keep a stable fingerprint for invalidating the skill cache on UIA and ARIA without the changing runtime state causing constant cache misses?
+
+## Refuted
 
 - (0-3) When an action uses variables, Stagehand builds the cache key from the variable names, not their values, so a single cached entry serves many parameterized inputs. This is equivalent to faena's TOML skills with parameters. — https://docs.stagehand.dev/v3/best-practices/caching.md
 - (0-3) In WAA, the best multimodal OS agent evaluated reaches only a 19.5% success rate. Humans reach 74.5%, which leaves a large gap for Windows desktop agents. — https://icml.cc/virtual/2025/poster/45035

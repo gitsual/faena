@@ -34,6 +34,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
 using Faena.Escena;
+using Faena.Agente;
 
 namespace Faena;
 
@@ -102,7 +103,7 @@ internal static class Browsers
     internal static IReadOnlyList<(string Folder, string[] Executables)> Layout()
     {
         var json = Json.LoadNode(BrowsersJson) as JsonObject
-                   ?? throw new InvalidOperationException($"No puedo leer {BrowsersJson}");
+                   ?? throw new InvalidOperationException(Lengua.T($"No puedo leer {BrowsersJson}", $"Cannot read {BrowsersJson}"));
         var revisions = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var entry in json["browsers"]?.AsArray() ?? new JsonArray())
         {
@@ -114,7 +115,7 @@ internal static class Browsers
         foreach (var (name, executables) in Needed)
         {
             if (!revisions.TryGetValue(name, out var revision))
-                throw new InvalidOperationException($"{BrowsersJson} no trae la revisión de {name}");
+                throw new InvalidOperationException(Lengua.T($"{BrowsersJson} no trae la revisión de {name}", $"{BrowsersJson} has no revision for {name}"));
             layout.Add((name.Replace('-', '_') + "-" + revision, executables));
         }
         return layout;
@@ -158,27 +159,27 @@ internal static class Browsers
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            return $"No puedo crear la carpeta del navegador {Paths.Navegador}: {e.Message}";
+            return Lengua.T($"No puedo crear la carpeta del navegador {Paths.Navegador}: {e.Message}", $"Cannot create the browser folder {Paths.Navegador}: {e.Message}");
         }
 
         string? last = null;
         for (var attempt = 1; attempt <= 2; attempt++)
         {
             progress?.Report(attempt == 1
-                ? $"Descargando Chromium en {Paths.Navegador}…"
-                : "La descarga se quedó parada; lo intento otra vez…");
+                ? Lengua.T($"Descargando Chromium en {Paths.Navegador}…", $"Downloading Chromium into {Paths.Navegador}…")
+                : Lengua.T("La descarga se quedó parada; lo intento otra vez…", "The download stalled; trying again…"));
             var (code, hung, error) = await InstallOnceAsync(progress, cancel).ConfigureAwait(false);
             if (Installed())
                 return null;
             last = hung
-                ? "La descarga se quedó parada dos veces"
+                ? Lengua.T("La descarga se quedó parada dos veces", "The download stalled twice")
                 : error ?? (code == 0
-                    ? $"Playwright terminó sin dejar en {Paths.Navegador} las carpetas {string.Join(", ", Folders())}"
-                    : $"Playwright terminó con el código {code}");
+                    ? Lengua.T($"Playwright terminó sin dejar en {Paths.Navegador} las carpetas {string.Join(", ", Folders())}", $"Playwright ended without leaving the folders {string.Join(", ", Folders())} in {Paths.Navegador}")
+                    : Lengua.T($"Playwright terminó con el código {code}", $"Playwright ended with code {code}"));
             if (!hung)
                 break;
         }
-        return "No he podido descargar el navegador Chromium: " + last + ".";
+        return Lengua.T("No he podido descargar el navegador Chromium: ", "Could not download the Chromium browser: ") + last + ".";
     }
 
     /// <summary>
@@ -336,10 +337,11 @@ internal static class Browsers
         int id;
         try { id = proc.Id; }
         catch (InvalidOperationException) { id = 0; }
-        return $"no he podido parar el instalador de Playwright (node.exe, pid {id}); ciérralo desde el Administrador de tareas";
+        return Lengua.T($"no he podido parar el instalador de Playwright (node.exe, pid {id}); ciérralo desde el Administrador de tareas",
+                        $"could not stop Playwright's installer (node.exe, pid {id}); close it from the Task Manager");
     }
 
-    /// <summary>The driver's lines as the user sees them: the known shapes in Spanish, the rest as they come.</summary>
+    /// <summary>The driver's lines as the user sees them: the known shapes in the interface's language, the rest as they come.</summary>
     private static string Translate(string line)
     {
         // The driver dims the URL with ANSI colour codes even into a pipe; a dialog label
@@ -347,13 +349,13 @@ internal static class Browsers
         line = Regex.Replace(line, @"\x1b\[[0-9;]*[A-Za-z]", "").Trim();
         var m = Regex.Match(line, @"^Downloading (.+?) from \S+$");
         if (m.Success)
-            return $"Descargando {m.Groups[1].Value}…";
+            return Lengua.T($"Descargando {m.Groups[1].Value}…", $"Downloading {m.Groups[1].Value}…");
         m = Regex.Match(line, @"^\|.*\|\s*(\d+)% of (.+)$");
         if (m.Success)
-            return $"Descargando… {m.Groups[1].Value} % de {m.Groups[2].Value}";
+            return Lengua.T($"Descargando… {m.Groups[1].Value} % de {m.Groups[2].Value}", $"Downloading… {m.Groups[1].Value}% of {m.Groups[2].Value}");
         m = Regex.Match(line, @"^(.+?) downloaded to .+$");
         if (m.Success)
-            return $"{m.Groups[1].Value} descargado; instalando…";
+            return Lengua.T($"{m.Groups[1].Value} descargado; instalando…", $"{m.Groups[1].Value} downloaded; installing…");
         return line;
     }
 
@@ -396,8 +398,8 @@ internal static class Browsers
     private static string Describe(Activity a)
     {
         if (a.DownloadBytes > 0)
-            return $"Descargando Chromium… {a.DownloadBytes / (1024 * 1024)} MB";
-        return $"Instalando… {a.Files} ficheros ({a.Bytes / (1024 * 1024)} MB)";
+            return Lengua.T($"Descargando Chromium… {a.DownloadBytes / (1024 * 1024)} MB", $"Downloading Chromium… {a.DownloadBytes / (1024 * 1024)} MB");
+        return Lengua.T($"Instalando… {a.Files} ficheros ({a.Bytes / (1024 * 1024)} MB)", $"Installing… {a.Files} files ({a.Bytes / (1024 * 1024)} MB)");
     }
 
     // --- Job Object: the driver's tree dies with this process -------------------------

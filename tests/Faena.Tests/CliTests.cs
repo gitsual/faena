@@ -8,6 +8,7 @@ public sealed class CliTests : IDisposable
     private readonly TextWriter _err = Console.Error;
     private readonly StringWriter _salida = new();
     private readonly StringWriter _errores = new();
+    private readonly Idioma _idioma = new("es");
 
     public CliTests()
     {
@@ -19,6 +20,7 @@ public sealed class CliTests : IDisposable
 
     public void Dispose()
     {
+        _idioma.Dispose();
         Console.SetOut(_out);
         Console.SetError(_err);
         Environment.SetEnvironmentVariable("FAENA_HABILIDADES", null);

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -328,6 +328,16 @@ details summary { cursor: pointer; font: 18px var(--versalita); letter-spacing: 
 #aviso-flotante { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); background: var(--hollin); color: var(--farol); box-shadow: inset 0 0 0 2px var(--farol); padding: 10px 20px; font: 600 26px/1.1 var(--mano); opacity: 0; transition: all .25s; pointer-events: none; z-index: 20; }
 #aviso-flotante.ver { opacity: 1; transform: translateX(-50%); }
 
+/* ---------- ajustes: segmentos a lápiz ---------- */
+.ajustes-btn { font-size: 17px; padding: 8px 14px 10px; color: var(--cal-sucia); }
+.segmentos { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
+.segmentos button { border: 2px solid var(--lapiz); background: transparent; color: var(--lapiz); padding: 8px 14px; min-height: 42px; font: 16px var(--libreta); }
+.segmentos button:hover { background: rgba(66,54,45,.1); }
+.segmentos button.on { background: var(--lapiz); color: var(--estraza-clara); }
+.hoja .campo .campo { margin-bottom: 14px; }
+input[type=password] { width: 100%; font: 18px/32px var(--libreta); color: #1F1A15; background: transparent; border: 0; border-bottom: 2px solid var(--lapiz); padding: 0 2px; min-height: 40px; }
+input[type=password]:focus { outline: none; background: rgba(214,176,148,.38); }
+
 @media (max-width: 860px) {
   body { grid-template-columns: 1fr; overflow: auto; }
   aside { display: none; }
@@ -348,14 +358,15 @@ details summary { cursor: pointer; font: 18px var(--versalita); letter-spacing: 
     <b>faena</b>
   </div>
   <nav class="menu-lateral" aria-label="faena">
-    <button class="ir" id="btn-encargar">dar un recado</button>
-    <button class="ir" id="btn-repertorio">oficios <small id="n-oficios"></small></button>
+    <button class="ir" id="btn-encargar" data-t="dar_recado">run an errand</button>
+    <button class="ir" id="btn-repertorio"><span data-t="oficios">trades</span> <small id="n-oficios"></small></button>
   </nav>
   <div id="bloque-encargos">
-    <div class="titulo-lista">recados</div>
+    <div class="titulo-lista" data-t="recados">errands</div>
     <div id="lista-encargos"></div>
   </div>
-  <div class="pie-lateral">trabaja en el callejón,<br>no en su escritorio</div>
+  <button class="ir ajustes-btn" id="btn-ajustes" data-t="ajustes">settings</button>
+  <div class="pie-lateral" data-t-html="pie">works in the back alley,<br>not at your desk</div>
 </aside>
 
 <main><div class="lienzo" id="vista"></div></main>
@@ -370,6 +381,161 @@ const api = async (ruta, datos) => {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(datos)});
   return r.json();
 };
+
+/* ---------- idioma: English by default, español in Settings ---------- */
+const TEXTOS = {
+  dar_recado: {en: "run an errand", es: "dar un recado"},
+  oficios: {en: "trades", es: "oficios"},
+  recados: {en: "errands", es: "recados"},
+  ajustes: {en: "settings", es: "ajustes"},
+  pie: {en: "works in the back alley,<br>not at your desk", es: "trabaja en el callejón,<br>no en su escritorio"},
+  la_web: {en: "the website", es: "la web"},
+  portada_h1: {en: "Tell me what needs doing.", es: "Dígame qué hay que hacer."},
+  portada_dice: {en: "I run your errands in the back alley, without setting foot in your house, and I write it all down in my notebook.", es: "Hago sus recados en el callejón, sin entrar en su casa, y lo apunto todo en la libreta."},
+  portada_sub: {en: "In a website or in a program on this computer, without taking your screen. Before sending, deleting, paying for or accepting anything, I stop and ask for your signature. What goes well I learn as a trade.", es: "En una web o en un programa del ordenador, sin quitarle la pantalla. Antes de enviar, borrar, pagar o aceptar nada, me paro y le pido su firma. Lo que sale bien lo aprendo de oficio."},
+  sin_modelo_t: {en: "I have nothing to think with today, sir.", es: "Hoy no tengo con qué pensar, señor."},
+  sin_modelo_p: {en: "faena thinks with a model on this computer (Ollama, with <code>qwen3-coder:30b</code>), or with the one you set in <a href=\"#\" id=\"ir-ajustes\">settings</a>. Without a model it only repeats the trades it already knows, as they are.", es: "faena piensa con un modelo en este equipo (Ollama, con <code>qwen3-coder:30b</code>) o con el que elija en los <a href=\"#\" id=\"ir-ajustes\">ajustes</a>. Sin modelo solo repite los oficios que ya sabe, tal cual."},
+  el_recado: {en: "the errand", es: "el recado"},
+  faenando: {en: "at work", es: "faenando"},
+  la_libreta: {en: "the notebook", es: "la libreta"},
+  tres_1: {en: "What needs doing and where: a website or a program. And what I may do without asking for your signature.", es: "Qué hay que hacer y dónde: una web o un programa. Y qué puedo hacer sin pedirle firma."},
+  tres_2: {en: "I work apart and write down every step. Before anything that cannot be undone, I stop and ask you.", es: "Trabajo aparte y voy apuntando cada paso. Ante lo que no tiene vuelta, me paro y le pregunto."},
+  tres_3: {en: "What I did, line by line, with the photos pasted in. If it went well, I learn it as a trade.", es: "Lo que hice, renglón a renglón, con las fotos pegadas. Si salió bien, lo aprendo de oficio."},
+  mejor_no: {en: "better not", es: "mejor no"},
+  vacio_lista: {en: "you have not sent me anything yet", es: "aún no me ha mandado nada"},
+  st_marcha: {en: "at work…", es: "faenando…"}, st_pregunta: {en: "waiting for your signature", es: "espera su firma"},
+  st_hecho: {en: "done", es: "hecho"}, st_pendiente: {en: "your signature was missing", es: "faltó su firma"},
+  st_medias: {en: "half done", es: "a medias"}, st_parado: {en: "stopped", es: "parado"}, st_cortado: {en: "cut short", es: "se cortó"},
+  p_enviar: {en: "send", es: "enviar"}, p_borrar: {en: "delete", es: "borrar"}, p_pagar: {en: "pay or buy", es: "pagar o comprar"}, p_aceptar: {en: "accept or sign", es: "aceptar o firmar"},
+  c_enviar: {en: "sending something", es: "un envío"}, c_borrar: {en: "deleting something", es: "un borrado"}, c_pagar: {en: "paying for something", es: "un pago"}, c_aceptar: {en: "accepting or signing something", es: "una aceptación o una firma"},
+  h1_recado: {en: "Run an errand", es: "Dar un recado"},
+  de_oficio: {en: "by trade", es: "de oficio"},
+  sin_oficio: {en: "without the trade", es: "sin el oficio"},
+  que_hacer: {en: "What needs doing?", es: "¿Qué hay que hacer?"},
+  ph_obra: {en: "Optional: the same with other data, for example “now with the title Buy milk”", es: "Opcional: lo mismo con otros datos, por ejemplo «ahora con título Comprar leche»"},
+  ph_objetivo: {en: "For example: create a note titled “Buy bread” with the text “two loaves”", es: "Por ejemplo: crea una nota con título «Comprar pan» y texto «dos barras»"},
+  nota_obra: {en: "I know this trade already: the new data is enough", es: "el oficio ya me lo sé: basta con los datos nuevos"},
+  nota_objetivo: {en: "tell me as you would tell an errand boy, with the data I need", es: "dígamelo como a un mozo, con los datos que hagan falta"},
+  datos_vez: {en: "This time's data", es: "Los datos de esta vez"},
+  sin_pensar_b: {en: "Without thinking: repeat it as it is", es: "Sin pensar: repetirlo tal cual"},
+  sin_pensar_s: {en: "I ask no model; faster, but nobody looks at the result", es: "no le pregunto a ningún modelo; más rápido, pero nadie mira el resultado"},
+  sin_pensar: {en: "without thinking", es: "sin pensar"},
+  donde: {en: "Where?", es: "¿Dónde?"},
+  otra_web: {en: "another website…", es: "otra web…"}, una_web: {en: "a website…", es: "una web…"}, un_programa: {en: "a program…", es: "un programa…"},
+  ph_url: {en: "the website's address (https://…)", es: "la dirección de la web (https://…)"},
+  aria_url: {en: "Website address", es: "Dirección de la web"},
+  ph_app: {en: "the program's path, for example C:\\Programs\\Notes.exe", es: "la ruta del programa, por ejemplo C:\\Programas\\Notas.exe"},
+  aria_app: {en: "Program path", es: "Ruta del programa"},
+  nota_app: {en: "I open it on a separate desktop you do not see; Store apps (Notepad, Calculator) only work with “watch how I do it”", es: "lo abro en un escritorio aparte que usted no ve; los de la Tienda de Windows (Bloc de notas, Calculadora) solo van con «mirar cómo lo hago»"},
+  sin_firma: {en: "Without asking for your signature, I may…", es: "Sin pedirle firma, puedo…"},
+  nota_firma: {en: "anything else, I stop and ask you here; if you do not answer, I write it down", es: "lo demás, me paro y le pregunto aquí; si no contesta, lo dejo apuntado"},
+  mirar_b: {en: "Watch how I do it", es: "Mirar cómo lo hago"},
+  mirar_s: {en: "I open the window in view; otherwise I work apart and you carry on with your things", es: "abro la ventana a la vista; si no, trabajo aparte y usted sigue con lo suyo"},
+  foto_b: {en: "A photo of every step", es: "Una foto de cada paso"},
+  foto_s: {en: "to paste into the notebook", es: "para pegarlas en la libreta"},
+  aprender_como: {en: "If it goes well, I learn it as a trade called…", es: "Si sale bien, lo aprendo de oficio como…"},
+  ph_aprender: {en: "for example: crear-nota (empty: I do not learn it)", es: "por ejemplo: crear-nota (vacío: no lo aprendo)"},
+  nota_aprender: {en: "and next time I do it without thinking, with the new data", es: "y la próxima vez lo hago sin pensar, con los datos nuevos"},
+  exportar_b: {en: "Export as skill", es: "Exportar como skill"},
+  exportar_s: {en: "also write it as an Agent Skill (SKILL.md) so Claude Code and other agents can hand it to me", es: "escribirlo también como skill para agentes (SKILL.md), para que Claude Code y otros me lo encarguen"},
+  jornal: {en: "The day's wage", es: "El jornal"},
+  pasos_max: {en: "steps at most", es: "pasos como mucho"}, minutos_max: {en: "minutes at most", es: "minutos como mucho"},
+  dar_el_recado: {en: "run the errand", es: "dar el recado"}, dejarlo: {en: "drop it", es: "dejarlo"},
+  ph_falta: {en: "Tell me what needs doing, for example: create a note titled “Buy bread”", es: "Dígame qué hay que hacer, por ejemplo: crea una nota con título «Comprar pan»"},
+  ya_sin_vuelta: {en: "I think this cannot be undone.", es: "Me parece que esto ya no tiene vuelta."},
+  es_sin_vuelta: {en: "That means {que}, and it cannot be undone.", es: "Es {que}: eso ya no tiene vuelta."},
+  hace_falta_firma: {en: "Your signature is needed", es: "Hace falta su firma"},
+  aqui_me_paro: {en: "Here I stop, sir.", es: "Aquí me paro, señor."},
+  por_que: {en: " Why: ", es: " Por qué: "},
+  firmo: {en: "sign, go ahead", es: "firmo, adelante"}, quieto: {en: "stay right there", es: "quieto ahí"},
+  el_programa: {en: "the program {p}", es: "el programa {p}"},
+  esperando_firma: {en: "Waiting for your signature…", es: "Esperando su firma…"}, voy: {en: "On my way. I'm on it.", es: "Voy. Estoy en ello."},
+  el_jornal: {en: "the day's wage", es: "el jornal"},
+  n_pasos: {en: "{n} steps", es: "{n} pasos"}, paso: {en: "step", es: "paso"}, pasos: {en: "steps", es: "pasos"}, de_tope: {en: "of {t}", es: "de {t}"},
+  mirando: {en: "Looking at what is there…", es: "Mirando lo que hay…"},
+  en_donde: {en: "In {d}, {como}: you can carry on with your things.", es: "En {d}, {como}: usted puede seguir con lo suyo."},
+  escritorio_aparte: {en: "on a separate desktop", es: "en un escritorio aparte"}, sin_ventana: {en: "with no window", es: "sin ventana"},
+  con_oficio: {en: " With the trade “{o}”{s}.", es: " Con el oficio «{o}»{s}."}, coma_sin_pensar: {en: ", without thinking", es: ", sin pensar"},
+  que_lo_deje: {en: "let it be", es: "que lo deje"},
+  hecho_voz: {en: "Done, and written down.", es: "Hecho, y apuntado."},
+  me_pare: {en: "Here I stopped: your signature was missing.", es: "Aquí me paré: faltaba su firma."},
+  lo_de_antes: {en: "What came before is done. I did not do this last thing because {porque} and you did not give me permission.", es: "Lo de antes está hecho. Esto último no lo hice porque {porque} y usted no me dio permiso."},
+  no_tenia_vuelta: {en: "I thought it could not be undone", es: "me pareció que no tenía vuelta"}, es_cat: {en: "it meant {c}", es: "es {c}"},
+  repetir_firma: {en: "repeat it with your signature", es: "repetirlo con su firma"}, a_mano: {en: "or do it yourself by hand", es: "o hágalo usted a mano"},
+  me_mando_parar: {en: "You told me to stop halfway.", es: "Me mandó parar a medias."},
+  se_corto: {en: "It was cut short before finishing.", es: "Se cortó sin terminar."}, se_cerro: {en: "The window was closed or I could not start.", es: "Se cerró la ventana o no pude arrancar."},
+  sin_jornal: {en: "My day's wage ran out.", es: "Se me acabó el jornal."}, no_pude: {en: "I could not finish it.", es: "No lo pude terminar."},
+  veces_pense: {en: "{n} times I thought", es: "{n} veces que pensé"}, vez_pense: {en: "1 time I thought", es: "1 vez que pensé"},
+  oficio_memoria: {en: "trade “{o}”: {r} of {t} steps from memory", es: "oficio «{o}»: {r} de {t} pasos de memoria"},
+  ni_un_paso: {en: "I did not get to take a single step.", es: "No llegué a dar ni un paso."},
+  las_fotos: {en: "The photos", es: "Las fotos"}, foto: {en: "Photo {c}", es: "Foto {c}"},
+  al_acabar: {en: "at the end", es: "al acabar"}, tras_paso: {en: "after step {n}", es: "tras el paso {n}"},
+  sin_fotos: {en: "No photos this time.", es: "Sin fotos esta vez."},
+  que_lo_aprenda: {en: "learn it", es: "que lo aprenda"}, repetirlo: {en: "repeat it", es: "repetirlo"}, abrir_carpeta: {en: "open its folder", es: "abrir su carpeta"},
+  lo_que_apunta: {en: "What I am writing down", es: "Lo que va apuntando"}, renglones: {en: "{n} lines", es: "{n} renglones"},
+  aun_nada: {en: "nothing yet: I am getting started", es: "aún nada: estoy arrancando"},
+  mas: {en: "More", es: "Más"},
+  que_lo_deje_t: {en: "Shall I let it be?", es: "¿Que lo deje?"}, que_lo_deje_p: {en: "Whatever is already done stays done.", es: "Lo que ya esté hecho se queda hecho."},
+  voy_aviso: {en: "On my way.", es: "Voy."}, quieto_aviso: {en: "Staying put: I stop.", es: "Quieto: me paro."},
+  aprender_t: {en: "Learn it as a trade", es: "Aprenderlo de oficio"},
+  aprender_p: {en: "A short name to recognise it by. When you send me something similar, I will repeat these steps with the new data.", es: "Un nombre corto para reconocerlo. Cuando me mande algo parecido, repetiré estos pasos con los datos nuevos."},
+  ya_se: {en: "I can do it on my own now: “{n}”.", es: "Ya sé hacerlo solo: «{n}»."},
+  skill_escrita: {en: "Agent Skill written: {r}", es: "Skill escrita: {r}"},
+  tachar: {en: "cross out the errand", es: "tachar el recado"},
+  tachar_t: {en: "Shall I cross out this errand?", es: "¿Tacho este recado?"},
+  tachar_p: {en: "Its notebook, its log and its photos are deleted. What I did is not undone.", es: "Se borran su libreta, su registro y sus fotos. Lo que hice no se deshace."},
+  tacharlo: {en: "cross it out", es: "tacharlo"}, tachado: {en: "Crossed out.", es: "Tachado."},
+  oficios_h1: {en: "Trades", es: "Oficios"},
+  oficios_dice: {en: "what I already know how to do on my own, without thinking", es: "lo que ya sé hacer solo, sin pensarlo"},
+  oficios_sub: {en: "Each trade is something that went well once. I repeat it with the new data and only look at the end; if something changed in the website, I go on thinking from there.", es: "Cada oficio es algo que salió bien una vez. Lo repito con los datos nuevos y solo miro el final; si algo ha cambiado en la web, sigo pensando desde ahí."},
+  en_programa: {en: "in a program", es: "en un programa"}, en_web: {en: "in a website", es: "en una web"},
+  aprendido_el: {en: " · learned on {f}", es: " · aprendido el {f}"}, ejemplo: {en: "Example: {e}", es: "Ejemplo: {e}"},
+  los_pasos: {en: "the steps", es: "los pasos"}, hacerlo: {en: "do it", es: "hacerlo"},
+  sin_pensar_title: {en: "Repeat it as it is, without asking any model", es: "Repetirlo tal cual, sin preguntar a ningún modelo"},
+  como_skill: {en: "as a skill", es: "como skill"},
+  como_skill_title: {en: "Write it as an Agent Skill (SKILL.md) for Claude Code and other agents", es: "Escribirlo como skill para agentes (SKILL.md), para Claude Code y otros"},
+  descoserlo: {en: "unstitch it", es: "descoserlo"},
+  ninguno_aun: {en: "I do not know any trade yet", es: "Aún no sé ningún oficio"},
+  ninguno_1: {en: "Send me an errand and fill in <b>“I learn it as a trade”</b>: if it goes well, I stitch it here.", es: "Mándeme un recado y marque <b>«lo aprendo de oficio»</b>: si sale bien, lo coso aquí."},
+  ninguno_2: {en: "Or teach me a process you recorded with tramoya, down here.", es: "O enséñeme un proceso que grabó con tramoya, aquí abajo."},
+  descoser_t: {en: "Shall I unstitch “{o}”?", es: "¿Descoso «{o}»?"},
+  descoser_p: {en: "I will stop knowing it by heart; I can still do it by thinking.", es: "Dejaré de saberlo de memoria; podré seguir haciéndolo pensando."},
+  descosido: {en: "Unstitched.", es: "Descosido."},
+  ensenar_h: {en: "Teach me a new one", es: "Enseñarme uno nuevo"},
+  ensenar_p: {en: "From an errand that went well (“learn it”, in its notebook) or from a tramoya video, which already has the steps: paste the project's folder (the one with <code>proyecto.json</code>) or its name.", es: "Desde un recado que salió bien («que lo aprenda», en su libreta) o desde un vídeo de tramoya, que ya tiene los pasos: pegue la carpeta del proyecto (la que tiene <code>proyecto.json</code>) o su nombre."},
+  ph_origen: {en: "folder or name of the tramoya project", es: "carpeta o nombre del proyecto de tramoya"}, aria_origen: {en: "tramoya project", es: "Proyecto de tramoya"},
+  coserlo_aqui: {en: "stitch it here", es: "coserlo aquí"}, coserlo: {en: "stitch it", es: "coserlo"},
+  abrir_oficios: {en: "open the trades folder", es: "abrir la carpeta de los oficios"},
+  ajustes_h1: {en: "Settings", es: "Ajustes"},
+  ajustes_dice: {en: "how I speak and what I think with", es: "cómo hablo y con qué pienso"},
+  ajustes_sub: {en: "They are saved on this computer and apply to every errand from now on, including those sent from the command line; an option typed there (--lang, --backend, --model) or an environment variable still decides for that run.", es: "Se guardan en este equipo y valen para todos los recados desde ahora, también los que se mandan desde la línea de órdenes; una opción escrita allí (--lang, --backend, --model) o una variable de entorno sigue mandando para esa vez."},
+  idioma: {en: "Language", es: "Idioma"},
+  idioma_sub: {en: "Of this window, of the notebooks and logs, of the steps I write down and of the summary the model writes.", es: "De esta ventana, de las libretas y los registros, de los pasos que apunto y del resumen que escribe el modelo."},
+  ia: {en: "What I think with", es: "Con qué pienso"},
+  ia_sub: {en: "The model that decides each step. A local one does not let anything out of this computer; a remote one sends the text of the screens out.", es: "El modelo que decide cada paso. Uno local no saca nada de este equipo; uno remoto manda fuera el texto de las pantallas."},
+  ia_auto: {en: "automatic", es: "automático"}, ia_openai: {en: "OpenAI-compatible", es: "compatible con OpenAI"},
+  ia_auto_sub: {en: "Claude if there is ANTHROPIC_API_KEY in the environment; otherwise Ollama on this computer with qwen3-coder:30b.", es: "Claude si hay ANTHROPIC_API_KEY en el entorno; si no, Ollama en este equipo con qwen3-coder:30b."},
+  ia_remoto: {en: "Careful: the text of the screens I work on leaves this computer.", es: "Ojo: el texto de las pantallas que manejo sale de este equipo."},
+  ia_url_ollama: {en: "Ollama server", es: "Servidor de Ollama"}, ia_url_openai: {en: "Server (base URL, …/v1)", es: "Servidor (URL base, …/v1)"},
+  ia_modelo: {en: "Model", es: "Modelo"}, ia_modelo_ph: {en: "empty: the default", es: "vacío: el de siempre"},
+  ia_cargar: {en: "list models", es: "ver modelos"}, ia_modelos_n: {en: "{n} models on the server", es: "{n} modelos en el servidor"},
+  ia_clave: {en: "API key", es: "Clave de la API"}, ia_clave_ph: {en: "paste it here", es: "péguela aquí"},
+  ia_clave_guardada: {en: "A key is saved (…{fin}); leave it empty to keep it.", es: "Hay una clave guardada (…{fin}); déjelo vacío para conservarla."},
+  ia_clave_borrar: {en: "forget it", es: "olvidarla"}, ia_clave_nota: {en: "Saved only on this computer; the window never shows it again.", es: "Se guarda solo en este equipo; la ventana no la vuelve a enseñar."},
+  ia_probar: {en: "try it", es: "probarlo"}, ia_probando: {en: "Asking…", es: "Preguntando…"},
+  ia_ok: {en: "{m} answers in {s} s", es: "{m} contesta en {s} s"}, ia_mal: {en: "No answer: {e}", es: "Sin respuesta: {e}"},
+  ia_ahora: {en: "Now: {ia}", es: "Ahora: {ia}"},
+  guardar: {en: "save", es: "guardar"}, ajustes_ok: {en: "Saved.", es: "Guardado."},
+  skills_h: {en: "Skills for agents", es: "Skills para agentes"},
+  skills_p: {en: "To let Claude Code (or any agent that reads SKILL.md) hand me errands, run <code>faena skill install</code> once; each trade can be exported with “as a skill”. They go to <code>{d}</code>.", es: "Para que Claude Code (o cualquier agente que lea SKILL.md) me encargue recados, ejecute una vez <code>faena skill install</code>; cada oficio se exporta con «como skill». Van a <code>{d}</code>."},
+};
+let LANG = "en";
+const t = (k, v = {}) => String((TEXTOS[k] || {})[LANG] ?? (TEXTOS[k] || {}).en ?? k).replace(/\{(\w+)\}/g, (_, n) => v[n] ?? "");
+function traducirFijos() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
+  document.querySelectorAll("[data-t-html]").forEach((el) => { el.innerHTML = t(el.dataset.tHtml); });
+}
 
 const ICON = {
   clic: '<path d="M6 2.5v3M2.5 6h3M3.4 3.4l2 2M8 7l6 2.4-2.6 1 2.2 2.2-1.4 1.4-2.2-2.2-1 2.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>',
@@ -397,14 +563,16 @@ const ICON = {
   pantalla: '<rect x="1.5" y="2.5" width="13" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
   peli: '<rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 6v4l3.5-2z" fill="currentColor"/>',
 };
-const ico = (n, t = 16) => `<svg width="${t}" height="${t}" viewBox="0 0 16 16" aria-hidden="true">${ICON[n]}</svg>`;
+const ico = (n, tam = 16) => `<svg width="${tam}" height="${tam}" viewBox="0 0 16 16" aria-hidden="true">${ICON[n]}</svg>`;
 
-let INICIO = {modelo: true, windows: true};
-let VISTA = "portada";     // portada | encargar | encargo | repertorio
+let INICIO = {modelo: true, windows: true, ajustes: {}};
+let VISTA = "portada";     // portada | encargar | encargo | repertorio | ajustes
 let sondeo = null;
 
 async function cargarInicio() {
   INICIO = await api("/api/inicio");
+  LANG = INICIO.idioma || "en";
+  traducirFijos();
   await cargarEncargos();
 }
 
@@ -428,7 +596,7 @@ function websUsadas() {
 }
 
 function nombreWeb(url) {
-  try { return new URL(url).hostname; } catch { return "la web"; }
+  try { return new URL(url).hostname; } catch { return t("la_web"); }
 }
 
 /* Palotes, como en la pared de una celda: de cinco en cinco. */
@@ -448,32 +616,34 @@ function pintar() {
   const v = $("#vista");
   if (vistaPintada !== VISTA) { $("main").scrollTop = 0; vistaPintada = VISTA; }
   v.classList.remove("vista"); void v.offsetWidth; v.classList.add("vista");
-  ({portada, encargar, encargo, repertorio})[VISTA](v);
+  ({portada, encargar, encargo, repertorio, ajustes})[VISTA](v);
   marcarMenu();
 }
 
 function marcarMenu() {
   $("#btn-encargar").classList.toggle("activo", VISTA === "encargar" || VISTA === "portada");
   $("#btn-repertorio").classList.toggle("activo", VISTA === "repertorio");
+  $("#btn-ajustes").classList.toggle("activo", VISTA === "ajustes");
 }
 
 /* ---------- portada ---------- */
 function portada(v) {
   v.innerHTML = `<div class="portada"><div>
-      <h1>Dígame qué hay que hacer.</h1>
-      <p class="dice">Hago sus recados en el callejón, sin entrar en su casa, y lo apunto todo en la libreta.</p>
-      <p class="sub">En una web o en un programa del ordenador, sin quitarle la pantalla. Antes de enviar, borrar, pagar o aceptar nada, me paro y le pido su firma. Lo que sale bien lo aprendo de oficio.</p>
-      <button class="btn principal grande" id="empezar">dar un recado</button>
-      ${INICIO.modelo ? "" : `<div class="aviso mal" style="margin-top:24px"><span class="mano">Hoy no tengo con qué pensar, señor.</span><p>faena piensa con un modelo en este equipo (Ollama, con <code>qwen3-coder:30b</code>) o con Claude si hay <code>ANTHROPIC_API_KEY</code>. Sin modelo solo repite los oficios que ya sabe, tal cual.</p></div>`}
+      <h1>${t("portada_h1")}</h1>
+      <p class="dice">${t("portada_dice")}</p>
+      <p class="sub">${t("portada_sub")}</p>
+      <button class="btn principal grande" id="empezar">${t("dar_recado")}</button>
+      ${INICIO.modelo ? "" : `<div class="aviso mal" style="margin-top:24px"><span class="mano">${t("sin_modelo_t")}</span><p>${t("sin_modelo_p")}</p></div>`}
     </div>
     <svg class="mozo" viewBox="0 0 46 75" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M33 2 L21 46"/><path d="M14 46 L28 49 L27 53 L13 50 Z" fill="#745649"/><path d="M13 51 L2 72 M16 52 L8 73 M19 52 L14 74 M22 53 L20 74 M25 53 L26 73 M27 53 L32 71"/></svg>
     </div>
     <div class="tres">
-      <div class="hoja"><b>el recado</b><p>Qué hay que hacer y dónde: una web o un programa. Y qué puedo hacer sin pedirle firma.</p></div>
-      <div class="hoja"><b>faenando</b><p>Trabajo aparte y voy apuntando cada paso. Ante lo que no tiene vuelta, me paro y le pregunto.</p></div>
-      <div class="hoja"><b>la libreta</b><p>Lo que hice, renglón a renglón, con las fotos pegadas. Si salió bien, lo aprendo de oficio.</p></div>
+      <div class="hoja"><b>${t("el_recado")}</b><p>${t("tres_1")}</p></div>
+      <div class="hoja"><b>${t("faenando")}</b><p>${t("tres_2")}</p></div>
+      <div class="hoja"><b>${t("la_libreta")}</b><p>${t("tres_3")}</p></div>
     </div>`;
   $("#empezar").onclick = () => { PEDIDO = null; VISTA = "encargar"; pintar(); };
+  const ir = $("#ir-ajustes"); if (ir) ir.onclick = (e) => { e.preventDefault(); VISTA = "ajustes"; pintar(); };
 }
 
 /* ---------- diálogo ---------- */
@@ -481,7 +651,7 @@ function confirmar(titulo, texto, si, fn) {
   const d = document.createElement("div");
   d.className = "dialogo-fondo";
   d.innerHTML = `<div class="dialogo" role="dialog" aria-modal="true"><h2>${esc(titulo)}</h2><p>${esc(texto)}</p>
-    <div class="botones"><button class="btn principal" id="d-si">${esc(si)}</button><button class="btn discreto" id="d-no">mejor no</button></div></div>`;
+    <div class="botones"><button class="btn principal" id="d-si">${esc(si)}</button><button class="btn discreto" id="d-no">${t("mejor_no")}</button></div></div>`;
   document.body.append(d);
   const cerrar = () => { d.remove(); document.removeEventListener("keydown", tecla); };
   const tecla = (e) => { if (e.key === "Escape") cerrar(); };
@@ -499,14 +669,14 @@ let E = null;              // recado abierto
 let PEDIDO = null;         // lo que se está pidiendo
 const CHECK = '<svg width="11" height="11" viewBox="0 0 10 10"><path d="m1.5 5 2.2 2.4L8.6 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 const ESTADOS = {
-  "en-marcha": ["faenando…", "vivo"], pregunta: ["espera su firma", "pendiente"], hecho: ["hecho", "listo"],
-  pendiente: ["faltó su firma", "pendiente"], "sin terminar": ["a medias", "mal"], parado: ["parado", ""],
-  interrumpido: ["se cortó", "mal"],
+  "en-marcha": ["st_marcha", "vivo"], pregunta: ["st_pregunta", "pendiente"], hecho: ["st_hecho", "listo"],
+  pendiente: ["st_pendiente", "pendiente"], "sin terminar": ["st_medias", "mal"], parado: ["st_parado", ""],
+  interrumpido: ["st_cortado", "mal"],
 };
-const PERMISOS = [["enviar", "enviar"], ["borrar", "borrar"], ["pagar", "pagar o comprar"], ["aceptar", "aceptar o firmar"]];
-const CATEGORIAS = {enviar: "un envío", borrar: "un borrado", pagar: "un pago", aceptar: "una aceptación o una firma"};
+const PERMISOS = ["enviar", "borrar", "pagar", "aceptar"];
+const categoria = (c) => TEXTOS["c_" + c] ? t("c_" + c) : c;
 const base = (ruta) => String(ruta || "").split(/[\\/]/).pop();
-const conHuecos = (t) => esc(t).replace(/\{([\p{L}\p{N}_]+)\}/gu, '<span class="hueco">$1</span>');
+const conHuecos = (s) => esc(s).replace(/\{([\p{L}\p{N}_]+)\}/gu, '<span class="hueco">$1</span>');
 
 async function cargarEncargos() {
   [ENCARGOS, REPERTORIO] = await Promise.all([api("/api/encargos"), api("/api/repertorio")]);
@@ -516,11 +686,11 @@ async function cargarEncargos() {
 
 function pintarEncargos() {
   const l = $("#lista-encargos"); if (!l) return;
-  if (!ENCARGOS.length) { l.innerHTML = '<div class="vacio-lista">aún no me ha mandado nada</div>'; return; }
+  if (!ENCARGOS.length) { l.innerHTML = `<div class="vacio-lista">${t("vacio_lista")}</div>`; return; }
   l.innerHTML = ENCARGOS.slice(0, 15).map((e) => {
-    const [txt, cls] = ESTADOS[e.estado] || [e.estado, ""];
+    const [k, cls] = ESTADOS[e.estado] || [e.estado, ""];
     return `<button class="item ${E && E.id === e.id && VISTA === "encargo" ? "activo" : ""}" data-id="${esc(e.id)}">
-      <i class="punto ${cls}"></i><span>${esc(e.objetivo)}<small>${txt}</small></span></button>`;
+      <i class="punto ${cls}"></i><span>${esc(e.objetivo)}<small>${esc(t(k))}</small></span></button>`;
   }).join("");
   l.querySelectorAll(".item").forEach((b) => b.onclick = () => abrirEncargo(b.dataset.id));
 }
@@ -532,26 +702,31 @@ async function abrirEncargo(id) {
 }
 
 function guiaEncargo(actual) {
-  const nombres = ["el recado", "faenando", "la libreta"];
+  const nombres = [t("el_recado"), t("faenando"), t("la_libreta")];
   return `<ol class="pasos-guia">${nombres.map((n, i) => `<li class="${i === actual ? "ahora" : i < actual ? "hecho-fijo" : ""}">
     <span class="n">${i < actual ? "✓" : ["I", "II", "III"][i]}</span>${n}</li>`).join("")}</ol>`;
 }
 
-function pedirTexto(titulo, texto, valor, si, fn) {
+/* Un nombre para un oficio y, con «Exportar como skill», también su SKILL.md. */
+function pedirNombre(titulo, texto, valor, si, fn) {
   const d = document.createElement("div");
   d.className = "dialogo-fondo";
   d.innerHTML = `<div class="dialogo" role="dialog" aria-modal="true"><h2>${esc(titulo)}</h2><p>${esc(texto)}</p>
     <input type="text" id="d-texto" value="${esc(valor)}" spellcheck="false" aria-label="${esc(titulo)}">
-    <div class="botones" style="margin-top:18px"><button class="btn principal" id="d-si">${esc(si)}</button><button class="btn discreto" id="d-no">mejor no</button></div></div>`;
+    <div class="opcion" style="margin-top:14px"><div><b>${t("exportar_b")}</b><small>${t("exportar_s")}</small></div>
+      <label class="interruptor"><input type="checkbox" id="d-skill" aria-label="${t("exportar_b")}"><span></span></label></div>
+    <div class="botones" style="margin-top:18px"><button class="btn principal" id="d-si">${esc(si)}</button><button class="btn discreto" id="d-no">${t("mejor_no")}</button></div></div>`;
   document.body.append(d);
   const i = $("#d-texto", d); i.focus(); i.select();
   const cerrar = () => d.remove();
   $("#d-no", d).onclick = cerrar;
   d.onclick = (e) => { if (e.target === d) cerrar(); };
-  const ok = async () => { const t = i.value.trim(); if (!t) return i.focus(); if (await fn(t) !== false) cerrar(); };
+  const ok = async () => { const s = i.value.trim(); if (!s) return i.focus(); if (await fn(s, $("#d-skill", d).checked) !== false) cerrar(); };
   $("#d-si", d).onclick = ok;
   i.onkeydown = (e) => { if (e.key === "Enter") ok(); if (e.key === "Escape") cerrar(); };
 }
+
+const aprendida = (r) => { avisar(t("ya_se", {n: r.nombre})); if (r.skill) setTimeout(() => avisar(t("skill_escrita", {r: r.skill})), 2700); if (r.skill_error) setTimeout(() => avisar(r.skill_error), 2700); };
 
 const nombreObra = (texto) => texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 
@@ -559,7 +734,7 @@ const nombreObra = (texto) => texto.toLowerCase().normalize("NFD").replace(/[\u0
 function pedidoNuevo(obra) {
   const web = websUsadas()[0];
   const q = {objetivo: "", tipo: "web", url: web ? web.url : "", app: "", permitir: [], ver: false, capturas: true,
-    aprender: "", habilidad: "", sin_modelo: false, parametros: {}, max_pasos: 30, max_minutos: 10};
+    aprender: "", exportar_skill: false, habilidad: "", sin_modelo: false, parametros: {}, max_pasos: 30, max_minutos: 10};
   if (obra) {
     q.habilidad = obra.nombre; q.parametros = {...obra.parametros};
     if (obra.superficie === "escritorio") { q.tipo = "app"; q.app = obra.inicio; } else if (obra.inicio) q.url = obra.inicio;
@@ -574,39 +749,41 @@ function encargar(v) {
   const otraWeb = q.tipo === "web" && !webs.some((w) => w.url === q.url);
   const params = obra ? Object.entries(obra.parametros) : [];
   v.innerHTML = guiaEncargo(0) + `<form class="hoja" id="tarjeta-encargo" onsubmit="return false">
-      <h1 style="color:var(--lapiz)">Dar un recado</h1>
-      ${obra ? `<div class="obra-elegida"><span class="sc">de oficio</span><b>${esc(obra.nombre)}</b><small>${conHuecos(obra.descripcion)}</small>
-        <button type="button" class="chip" id="e-soltar">${ico("quitar", 13)} sin el oficio</button></div>` : ""}
-      <label class="campo"><span>¿Qué hay que hacer?</span>
-        <textarea id="e-objetivo" rows="2" maxlength="600" placeholder="${obra ? "Opcional: lo mismo con otros datos, por ejemplo «ahora con título Comprar leche»" : "Por ejemplo: crea una nota con título «Comprar pan» y texto «dos barras»"}">${esc(q.objetivo)}</textarea>
-        <small>${obra ? "el oficio ya me lo sé: basta con los datos nuevos" : "dígamelo como a un mozo, con los datos que hagan falta"}</small></label>
-      ${params.length ? `<div class="campo"><span>Los datos de esta vez</span>
+      <h1 style="color:var(--lapiz)">${t("h1_recado")}</h1>
+      ${obra ? `<div class="obra-elegida"><span class="sc">${t("de_oficio")}</span><b>${esc(obra.nombre)}</b><small>${conHuecos(obra.descripcion)}</small>
+        <button type="button" class="chip" id="e-soltar">${ico("quitar", 13)} ${t("sin_oficio")}</button></div>` : ""}
+      <label class="campo"><span>${t("que_hacer")}</span>
+        <textarea id="e-objetivo" rows="2" maxlength="600" placeholder="${esc(obra ? t("ph_obra") : t("ph_objetivo"))}">${esc(q.objetivo)}</textarea>
+        <small>${obra ? t("nota_obra") : t("nota_objetivo")}</small></label>
+      ${params.length ? `<div class="campo"><span>${t("datos_vez")}</span>
         ${params.map(([k, ej]) => `<label class="valor">${esc(k)}<input type="text" data-param="${esc(k)}" value="${esc(q.parametros[k] ?? ej)}" spellcheck="false"></label>`).join("")}
-        <div class="opcion"><div><b>Sin pensar: repetirlo tal cual</b><small>no le pregunto a ningún modelo; más rápido, pero nadie mira el resultado</small></div>
-          <label class="interruptor"><input type="checkbox" id="e-sin" ${q.sin_modelo ? "checked" : ""} aria-label="Sin pensar"><span></span></label></div></div>` : ""}
-      <div class="campo"><span>¿Dónde?</span>
+        <div class="opcion"><div><b>${t("sin_pensar_b")}</b><small>${t("sin_pensar_s")}</small></div>
+          <label class="interruptor"><input type="checkbox" id="e-sin" ${q.sin_modelo ? "checked" : ""} aria-label="${t("sin_pensar")}"><span></span></label></div></div>` : ""}
+      <div class="campo"><span>${t("donde")}</span>
         <div class="webs">
           ${webs.map((w) => `<button type="button" class="web ${q.tipo === "web" && q.url === w.url ? "on" : ""}" data-url="${esc(w.url)}" title="${esc(w.url)}">${ico("globo", 14)} ${esc(w.nombre)}</button>`).join("")}
-          <button type="button" class="web ${otraWeb ? "on" : ""}" data-otra="web">${ico("lapiz", 14)} ${webs.length ? "otra web…" : "una web…"}</button>
-          <button type="button" class="web ${q.tipo === "app" ? "on" : ""}" data-otra="app">${ico("pantalla", 14)} un programa…</button></div>
-        <input type="text" id="e-url" class="${otraWeb ? "" : "oculto"}" value="${esc(otraWeb ? q.url : "")}" placeholder="la dirección de la web (https://…)" spellcheck="false" aria-label="Dirección de la web">
-        <input type="text" id="e-app" class="${q.tipo === "app" ? "" : "oculto"}" value="${esc(q.app)}" placeholder="la ruta del programa, por ejemplo C:\\Programas\\Notas.exe" spellcheck="false" aria-label="Ruta del programa">
-        <small id="e-app-nota" class="${q.tipo === "app" ? "" : "oculto"}">lo abro en un escritorio aparte que usted no ve; los de la Tienda de Windows (Bloc de notas, Calculadora) solo van con «mirar cómo lo hago»</small></div>
-      <div class="campo"><span>Sin pedirle firma, puedo…</span>
-        <div class="webs">${PERMISOS.map(([k, t]) => `<button type="button" class="chip ${q.permitir.includes(k) ? "on" : ""}" data-permiso="${k}"><span class="marca-check">${q.permitir.includes(k) ? CHECK : ""}</span>${t}</button>`).join("")}</div>
-        <small>lo demás, me paro y le pregunto aquí; si no contesta, lo dejo apuntado</small></div>
-      <div class="opcion"><div><b>Mirar cómo lo hago</b><small>abro la ventana a la vista; si no, trabajo aparte y usted sigue con lo suyo</small></div>
-        <label class="interruptor"><input type="checkbox" id="e-ver" ${q.ver ? "checked" : ""} aria-label="Mirar cómo lo hago"><span></span></label></div>
-      <div class="opcion"><div><b>Una foto de cada paso</b><small>para pegarlas en la libreta</small></div>
-        <label class="interruptor"><input type="checkbox" id="e-capturas" ${q.capturas ? "checked" : ""} aria-label="Una foto de cada paso"><span></span></label></div>
-      ${obra ? "" : `<label class="campo" style="margin-top:14px"><span>Si sale bien, lo aprendo de oficio como…</span>
-        <input type="text" id="e-aprender" value="${esc(q.aprender)}" placeholder="por ejemplo: crear-nota (vacío: no lo aprendo)" spellcheck="false">
-        <small>y la próxima vez lo hago sin pensar, con los datos nuevos</small></label>`}
-      <details><summary>El jornal</summary><div class="fila" style="margin-top:6px;flex-wrap:wrap;gap:24px">
-        <label class="valor">pasos como mucho<input type="text" id="e-pasos" value="${q.max_pasos}" inputmode="numeric"></label>
-        <label class="valor">minutos como mucho<input type="text" id="e-minutos" value="${q.max_minutos}" inputmode="numeric"></label></div></details>
-      <div class="botones" style="margin-top:22px"><button type="button" class="btn principal grande" id="e-ir">dar el recado</button>
-        <button type="button" class="btn discreto" id="e-anular">dejarlo</button></div>
+          <button type="button" class="web ${otraWeb ? "on" : ""}" data-otra="web">${ico("lapiz", 14)} ${webs.length ? t("otra_web") : t("una_web")}</button>
+          <button type="button" class="web ${q.tipo === "app" ? "on" : ""}" data-otra="app">${ico("pantalla", 14)} ${t("un_programa")}</button></div>
+        <input type="text" id="e-url" class="${otraWeb ? "" : "oculto"}" value="${esc(otraWeb ? q.url : "")}" placeholder="${esc(t("ph_url"))}" spellcheck="false" aria-label="${esc(t("aria_url"))}">
+        <input type="text" id="e-app" class="${q.tipo === "app" ? "" : "oculto"}" value="${esc(q.app)}" placeholder="${esc(t("ph_app"))}" spellcheck="false" aria-label="${esc(t("aria_app"))}">
+        <small id="e-app-nota" class="${q.tipo === "app" ? "" : "oculto"}">${t("nota_app")}</small></div>
+      <div class="campo"><span>${t("sin_firma")}</span>
+        <div class="webs">${PERMISOS.map((k) => `<button type="button" class="chip ${q.permitir.includes(k) ? "on" : ""}" data-permiso="${k}"><span class="marca-check">${q.permitir.includes(k) ? CHECK : ""}</span>${t("p_" + k)}</button>`).join("")}</div>
+        <small>${t("nota_firma")}</small></div>
+      <div class="opcion"><div><b>${t("mirar_b")}</b><small>${t("mirar_s")}</small></div>
+        <label class="interruptor"><input type="checkbox" id="e-ver" ${q.ver ? "checked" : ""} aria-label="${esc(t("mirar_b"))}"><span></span></label></div>
+      <div class="opcion"><div><b>${t("foto_b")}</b><small>${t("foto_s")}</small></div>
+        <label class="interruptor"><input type="checkbox" id="e-capturas" ${q.capturas ? "checked" : ""} aria-label="${esc(t("foto_b"))}"><span></span></label></div>
+      ${obra ? "" : `<label class="campo" style="margin-top:14px"><span>${t("aprender_como")}</span>
+        <input type="text" id="e-aprender" value="${esc(q.aprender)}" placeholder="${esc(t("ph_aprender"))}" spellcheck="false">
+        <small>${t("nota_aprender")}</small></label>
+        <div class="opcion"><div><b>${t("exportar_b")}</b><small>${t("exportar_s")}</small></div>
+          <label class="interruptor"><input type="checkbox" id="e-skill" ${q.exportar_skill ? "checked" : ""} aria-label="${esc(t("exportar_b"))}"><span></span></label></div>`}
+      <details><summary>${t("jornal")}</summary><div class="fila" style="margin-top:6px;flex-wrap:wrap;gap:24px">
+        <label class="valor">${t("pasos_max")}<input type="text" id="e-pasos" value="${q.max_pasos}" inputmode="numeric"></label>
+        <label class="valor">${t("minutos_max")}<input type="text" id="e-minutos" value="${q.max_minutos}" inputmode="numeric"></label></div></details>
+      <div class="botones" style="margin-top:22px"><button type="button" class="btn principal grande" id="e-ir">${t("dar_el_recado")}</button>
+        <button type="button" class="btn discreto" id="e-anular">${t("dejarlo")}</button></div>
     </form>`;
   const leer = () => {
     q.objetivo = $("#e-objetivo").value;
@@ -616,6 +793,7 @@ function encargar(v) {
     q.app = $("#e-app").value.trim();
     q.ver = $("#e-ver").checked; q.capturas = $("#e-capturas").checked;
     if ($("#e-aprender")) q.aprender = $("#e-aprender").value.trim();
+    if ($("#e-skill")) q.exportar_skill = $("#e-skill").checked;
     q.max_pasos = Number($("#e-pasos").value) || 30; q.max_minutos = Number($("#e-minutos").value) || 10;
   };
   const otraWebActiva = () => !!v.querySelector('.web.on[data-otra="web"]');
@@ -643,11 +821,12 @@ function encargar(v) {
   $("#e-anular").onclick = () => { PEDIDO = null; VISTA = "portada"; pintar(); };
   $("#e-ir").onclick = async () => {
     leer();
-    if (!q.objetivo.trim() && !q.habilidad) { objetivo.focus(); objetivo.placeholder = "Dígame qué hay que hacer, por ejemplo: crea una nota con título «Comprar pan»"; return; }
+    if (!q.objetivo.trim() && !q.habilidad) { objetivo.focus(); objetivo.placeholder = t("ph_falta"); return; }
     if (q.tipo === "app" && !q.app) { $("#e-app").focus(); return; }
     if (q.tipo === "web" && !q.url) { $("#e-url").classList.remove("oculto"); $("#e-url").focus(); return; }
     const cuerpo = {objetivo: q.objetivo.trim(), permitir: q.permitir, ver: q.ver, capturas: q.capturas, aprender: q.aprender,
-      habilidad: q.habilidad, sin_modelo: q.sin_modelo, parametros: q.parametros, max_pasos: q.max_pasos, max_minutos: q.max_minutos};
+      exportar_skill: !!(q.aprender && q.exportar_skill), habilidad: q.habilidad, sin_modelo: q.sin_modelo, parametros: q.parametros,
+      max_pasos: q.max_pasos, max_minutos: q.max_minutos};
     if (q.tipo === "app") cuerpo.app = q.app; else cuerpo.url = q.url;
     $("#e-ir").disabled = true;
     const r = await api("/api/encargar", cuerpo);
@@ -662,94 +841,95 @@ function encargar(v) {
 const cueHTML = (c) => `<li class="${esc(c.tipo)}"><span class="t">${esc(c.hora)}</span><span>${esc(c.texto)}</span></li>`;
 
 function alto(q) {
-  const que = q.categoria === "irreversible" ? "Me parece que esto ya no tiene vuelta." : `Es ${CATEGORIAS[q.categoria] || q.categoria}: eso ya no tiene vuelta.`;
-  return `<section class="alto" id="alto" aria-label="Hace falta su firma"><span class="mano">Aquí me paro, señor.</span>
+  const que = q.categoria === "irreversible" ? t("ya_sin_vuelta") : t("es_sin_vuelta", {que: categoria(q.categoria)});
+  return `<section class="alto" id="alto" aria-label="${esc(t("hace_falta_firma"))}"><span class="mano">${t("aqui_me_paro")}</span>
     <p class="accion">${esc(q.accion)}</p>
-    <p class="pista">${que}${q.motivo ? " Por qué: " + esc(q.motivo) : ""}</p>
-    <div class="botones"><button class="btn principal grande" id="alto-si">firmo, adelante</button>
-      <button class="btn" id="alto-no">quieto ahí</button></div></section>`;
+    <p class="pista">${esc(que)}${q.motivo ? t("por_que") + esc(q.motivo) : ""}</p>
+    <div class="botones"><button class="btn principal grande" id="alto-si">${t("firmo")}</button>
+      <button class="btn" id="alto-no">${t("quieto")}</button></div></section>`;
 }
 
 function encargo(v) {
   const e = E;
   const vivo = e.estado === "en-marcha" || e.estado === "pregunta";
   const inf = e.informe;
-  const donde = e.superficie === "escritorio" ? `el programa ${esc(base(e.donde))}` : esc(nombreWeb(e.donde));
+  const donde = e.superficie === "escritorio" ? t("el_programa", {p: esc(base(e.donde))}) : esc(nombreWeb(e.donde));
   const tope = e.max_pasos || 30;
   let cuerpo = "";
   if (vivo) {
     cuerpo = (e.pregunta ? alto(e.pregunta) : "") + `<div class="faenando" id="tarjeta-funcion">
-      <div class="en-vivo"><i class="farol"></i><p class="dice">${e.pregunta ? "Esperando su firma…" : "Voy. Estoy en ello."}</p></div>
-      <div class="jornal"><span class="sc">el jornal</span><div class="palotes" id="f-palos" role="img" aria-label="${e.n} pasos">${palotes(e.n)}</div>
-        <small><span id="f-n">${e.n}</span> <span id="f-pasos">${e.n === 1 ? "paso" : "pasos"}</span> de ${tope}</small></div>
-      <div class="ultimo ${e.ultimo ? "" : "espera"}" id="f-ultimo"><span>${esc(e.ultimo || "Mirando lo que hay…")}</span></div>
-      <p class="pista" style="margin:0">En ${donde}, ${e.superficie === "escritorio" ? "en un escritorio aparte" : "sin ventana"}: usted puede seguir con lo suyo.${e.habilidad ? ` Con el oficio «${esc(e.habilidad)}»${e.sin_modelo ? ", sin pensar" : ""}.` : ""}</p>
+      <div class="en-vivo"><i class="farol"></i><p class="dice">${e.pregunta ? t("esperando_firma") : t("voy")}</p></div>
+      <div class="jornal"><span class="sc">${t("el_jornal")}</span><div class="palotes" id="f-palos" role="img" aria-label="${esc(t("n_pasos", {n: e.n}))}">${palotes(e.n)}</div>
+        <small><span id="f-n">${e.n}</span> <span id="f-pasos">${e.n === 1 ? t("paso") : t("pasos")}</span> ${t("de_tope", {t: tope})}</small></div>
+      <div class="ultimo ${e.ultimo ? "" : "espera"}" id="f-ultimo"><span>${esc(e.ultimo || t("mirando"))}</span></div>
+      <p class="pista" style="margin:0">${t("en_donde", {d: donde, como: e.superficie === "escritorio" ? t("escritorio_aparte") : t("sin_ventana")})}${e.habilidad ? t("con_oficio", {o: esc(e.habilidad), s: e.sin_modelo ? t("coma_sin_pensar") : ""}) : ""}</p>
       <div class="progreso"><i id="f-barra" style="width:${Math.min(100, Math.round(e.n / tope * 100))}%"></i></div>
-      <div class="botones" style="grid-column:1/-1;margin:0"><button class="btn claro" id="f-parar">que lo deje</button></div></div>`;
+      <div class="botones" style="grid-column:1/-1;margin:0"><button class="btn claro" id="f-parar">${t("que_lo_deje")}</button></div></div>`;
   } else {
     const r = inf || {};
     const est = e.estado;
     let voz = "", aviso = "";
-    if (est === "hecho") voz = "Hecho, y apuntado.";
+    if (est === "hecho") voz = t("hecho_voz");
     else if (est === "pendiente" && r.pendiente) {
-      voz = "Aquí me paré: faltaba su firma.";
+      voz = t("me_pare");
+      const porque = r.pendiente.categoria === "irreversible" ? t("no_tenia_vuelta") : t("es_cat", {c: esc(categoria(r.pendiente.categoria))});
       aviso = `<div class="alto"><p class="accion">${esc(r.pendiente.accion)}</p>
-        <p class="pista">Lo de antes está hecho. Esto último no lo hice porque ${r.pendiente.categoria === "irreversible" ? "me pareció que no tenía vuelta" : `es ${esc(CATEGORIAS[r.pendiente.categoria] || r.pendiente.categoria)}`} y usted no me dio permiso.</p>
-        <div class="botones"><button class="btn principal grande" id="i-permiso" data-cat="${esc(r.pendiente.categoria)}">repetirlo con su firma</button>
-          <span class="pista">o hágalo usted a mano</span></div></div>`;
+        <p class="pista">${t("lo_de_antes", {porque})}</p>
+        <div class="botones"><button class="btn principal grande" id="i-permiso" data-cat="${esc(r.pendiente.categoria)}">${t("repetir_firma")}</button>
+          <span class="pista">${t("a_mano")}</span></div></div>`;
     }
-    else if (est === "parado") voz = "Me mandó parar a medias.";
-    else if (est === "interrumpido") { voz = "Se cortó sin terminar."; aviso = `<div class="aviso mal"><p>Se cerró la ventana o no pude arrancar.</p>${e.error ? `<p>${esc(e.error)}</p>` : ""}</div>`; }
+    else if (est === "parado") voz = t("me_mando_parar");
+    else if (est === "interrumpido") { voz = t("se_corto"); aviso = `<div class="aviso mal"><p>${t("se_cerro")}</p>${e.error ? `<p>${esc(e.error)}</p>` : ""}</div>`; }
     else {
-      voz = (r.avisos || []).some((a) => /tope|minutos/.test(a)) ? "Se me acabó el jornal." : "No lo pude terminar.";
+      voz = (r.avisos || []).some((a) => /tope|minutos|limit|minutes/.test(a)) ? t("sin_jornal") : t("no_pude");
       aviso = (r.avisos || []).filter((a) => a !== r.resumen).length ? `<div class="aviso mal">${(r.avisos || []).filter((a) => a !== r.resumen).map((a) => `<p>${esc(a)}</p>`).join("")}</div>` : "";
     }
     const pasos = r.pasos || [];
-    const datos = [r.segundos != null ? `${Math.round(r.segundos)} s` : "", r.turnos != null ? `${r.turnos} ${r.turnos === 1 ? "vez que pensé" : "veces que pensé"}` : "",
-      r.habilidad ? `oficio «${esc(r.habilidad.nombre)}»: ${r.habilidad.repetidos} de ${r.habilidad.total} pasos de memoria` : ""].filter(Boolean).join(" · ");
+    const datos = [r.segundos != null ? `${Math.round(r.segundos)} s` : "", r.turnos != null ? (r.turnos === 1 ? t("vez_pense") : t("veces_pense", {n: r.turnos})) : "",
+      r.habilidad ? t("oficio_memoria", {o: esc(r.habilidad.nombre), r: r.habilidad.repetidos, t: r.habilidad.total}) : ""].filter(Boolean).join(" · ");
     cuerpo += aviso + `<div class="libreta-abierta" id="libreta">
       <section><p class="dice">${esc(voz)}</p>${r.resumen ? `<p style="margin:0 0 6px">${esc(r.resumen)}</p>` : ""}
-        <div class="fila" style="margin:4px 0"><div class="palotes" style="justify-content:flex-start" role="img" aria-label="${pasos.length} pasos">${palotes(pasos.length)}</div></div>
-        ${pasos.length ? `<ol class="guion-informe">${pasos.map((p) => `<li><b>${esc(p.desc || p.tipo)}</b></li>`).join("")}</ol>` : '<p class="mano" style="font-size:24px">No llegué a dar ni un paso.</p>'}
+        <div class="fila" style="margin:4px 0"><div class="palotes" style="justify-content:flex-start" role="img" aria-label="${esc(t("n_pasos", {n: pasos.length}))}">${palotes(pasos.length)}</div></div>
+        ${pasos.length ? `<ol class="guion-informe">${pasos.map((p) => `<li><b>${esc(p.desc || p.tipo)}</b></li>`).join("")}</ol>` : `<p class="mano" style="font-size:24px">${t("ni_un_paso")}</p>`}
         ${datos ? `<p class="pista">${datos}</p>` : ""}</section>
-      <section aria-label="Las fotos">${(r.capturas || []).length ? `<div class="capturas">${r.capturas.map((c) => `<a href="/api/encargos/${esc(e.id)}/captura/${esc(c)}" target="_blank" rel="noopener"><img src="/api/encargos/${esc(e.id)}/captura/${esc(c)}" alt="Foto ${esc(c)}" loading="lazy"><small>${c.startsWith("final") ? "al acabar" : "tras el paso " + Number(c.slice(0, 2))}</small></a>`).join("")}</div>`
-        : '<p class="mano" style="font-size:24px">Sin fotos esta vez.</p>'}</section></div>
+      <section aria-label="${esc(t("las_fotos"))}">${(r.capturas || []).length ? `<div class="capturas">${r.capturas.map((c) => `<a href="/api/encargos/${esc(e.id)}/captura/${esc(c)}" target="_blank" rel="noopener"><img src="/api/encargos/${esc(e.id)}/captura/${esc(c)}" alt="${esc(t("foto", {c}))}" loading="lazy"><small>${c.startsWith("final") ? t("al_acabar") : t("tras_paso", {n: Number(c.slice(0, 2))})}</small></a>`).join("")}</div>`
+        : `<p class="mano" style="font-size:24px">${t("sin_fotos")}</p>`}</section></div>
       <div class="libreta-pie oscuro">
-        ${est === "hecho" && !(r.habilidad && r.habilidad.repetidos === r.habilidad.total) ? `<button class="btn principal" id="i-aprender">que lo aprenda</button>` : ""}
-        <button class="btn" id="i-repetir">repetirlo</button>
-        <button class="btn discreto derecha" id="i-carpeta">${ico("carpeta")} abrir su carpeta</button></div>`;
+        ${est === "hecho" && !(r.habilidad && r.habilidad.repetidos === r.habilidad.total) ? `<button class="btn principal" id="i-aprender">${t("que_lo_aprenda")}</button>` : ""}
+        <button class="btn" id="i-repetir">${t("repetirlo")}</button>
+        <button class="btn discreto derecha" id="i-carpeta">${ico("carpeta")} ${t("abrir_carpeta")}</button></div>`;
   }
-  cuerpo += `<div class="cabecera-pasos"><h2>Lo que va apuntando</h2><span class="contador derecha" id="f-cuenta">${e.cues.length} renglones</span></div>
-    <ol class="hoja-cues" id="hoja">${e.cues.length ? e.cues.map(cueHTML).join("") : '<li class="hoja-vacia">aún nada: estoy arrancando</li>'}</ol>`;
+  cuerpo += `<div class="cabecera-pasos"><h2>${t("lo_que_apunta")}</h2><span class="contador derecha" id="f-cuenta">${t("renglones", {n: e.cues.length})}</span></div>
+    <ol class="hoja-cues" id="hoja">${e.cues.length ? e.cues.map(cueHTML).join("") : `<li class="hoja-vacia">${t("aun_nada")}</li>`}</ol>`;
   v.innerHTML = guiaEncargo(vivo ? 1 : 2) + `<div class="titular"><h1>${esc(e.objetivo)}</h1>
-    <div class="menu"><button class="icono-btn" id="btn-menu-encargo" aria-label="Más" title="Más">${ico("puntos", 20)}</button></div></div>
+    <div class="menu"><button class="icono-btn" id="btn-menu-encargo" aria-label="${esc(t("mas"))}" title="${esc(t("mas"))}">${ico("puntos", 20)}</button></div></div>
     <p class="sub cifra" style="font-size:14px;color:var(--ceniza)">${esc(e.creado)} · ${donde}</p>` + cuerpo;
   const hoja = $("#hoja"); hoja.scrollTop = hoja.scrollHeight;
   const on = (id, fn) => { const b = $("#" + id); if (b) b.onclick = fn; };
-  on("f-parar", () => confirmar("¿Que lo deje?", "Lo que ya esté hecho se queda hecho.", "que lo deje", async () => { await api(`/api/encargos/${e.id}/parar`, {}); abrirEncargo(e.id); cargarEncargos(); }));
-  const responder = async (si) => { $("#alto").remove(); await api(`/api/encargos/${e.id}/responder`, {si}); avisar(si ? "Voy." : "Quieto: me paro."); };
+  on("f-parar", () => confirmar(t("que_lo_deje_t"), t("que_lo_deje_p"), t("que_lo_deje"), async () => { await api(`/api/encargos/${e.id}/parar`, {}); abrirEncargo(e.id); cargarEncargos(); }));
+  const responder = async (si) => { $("#alto").remove(); await api(`/api/encargos/${e.id}/responder`, {si}); avisar(si ? t("voy_aviso") : t("quieto_aviso")); };
   on("alto-si", () => responder(true));
   on("alto-no", () => responder(false));
   on("i-carpeta", () => api(`/api/encargos/${e.id}/abrir`, {}));
   on("i-repetir", () => { PEDIDO = pedidoDe(e); VISTA = "encargar"; pintar(); });
   on("i-permiso", () => { PEDIDO = pedidoDe(e); if (!PEDIDO.permitir.includes($("#i-permiso").dataset.cat)) PEDIDO.permitir.push($("#i-permiso").dataset.cat); VISTA = "encargar"; pintar(); });
-  on("i-aprender", () => pedirTexto("Aprenderlo de oficio", "Un nombre corto para reconocerlo. Cuando me mande algo parecido, repetiré estos pasos con los datos nuevos.", nombreObra(e.objetivo), "que lo aprenda", async (nombre) => {
-    const r = await api(`/api/encargos/${e.id}/aprender`, {nombre});
+  on("i-aprender", () => pedirNombre(t("aprender_t"), t("aprender_p"), nombreObra(e.objetivo), t("que_lo_aprenda"), async (nombre, skill) => {
+    const r = await api(`/api/encargos/${e.id}/aprender`, {nombre, exportar_skill: skill});
     if (r.error) { avisar(r.error); return false; }
-    await cargarEncargos(); avisar(`Ya sé hacerlo solo: «${r.nombre}».`);
+    await cargarEncargos(); aprendida(r);
   }));
   $("#btn-menu-encargo").onclick = (ev) => {
     ev.stopPropagation();
     const viejo = $(".menu-lista"); if (viejo) { viejo.remove(); return; }
     const m = document.createElement("div");
     m.className = "menu-lista";
-    m.innerHTML = `<button data-m="carpeta">${ico("carpeta")} abrir su carpeta</button><button data-m="borrar" class="peligro">${ico("quitar")} tachar el recado</button>`;
+    m.innerHTML = `<button data-m="carpeta">${ico("carpeta")} ${t("abrir_carpeta")}</button><button data-m="borrar" class="peligro">${ico("quitar")} ${t("tachar")}</button>`;
     $("#btn-menu-encargo").parentElement.append(m);
     m.onclick = (x) => {
       const o = x.target.closest("button"); if (!o) return; m.remove();
       if (o.dataset.m === "carpeta") api(`/api/encargos/${e.id}/abrir`, {});
-      if (o.dataset.m === "borrar") confirmar("¿Tacho este recado?", "Se borran su libreta, su registro y sus fotos. Lo que hice no se deshace.", "tacharlo", async () => {
-        await api(`/api/encargos/${e.id}/borrar`, {}); E = null; VISTA = "portada"; await cargarEncargos(); pintar(); avisar("Tachado.");
+      if (o.dataset.m === "borrar") confirmar(t("tachar_t"), t("tachar_p"), t("tacharlo"), async () => {
+        await api(`/api/encargos/${e.id}/borrar`, {}); E = null; VISTA = "portada"; await cargarEncargos(); pintar(); avisar(t("tachado"));
       });
     };
   };
@@ -760,7 +940,7 @@ function pedidoDe(e) {
   const p = e.pedido || {};
   const obra = REPERTORIO.find((o) => o.nombre === e.habilidad);
   const q = pedidoNuevo(obra);
-  q.objetivo = e.habilidad && e.objetivo.startsWith("Repetir «") ? "" : e.objetivo;
+  q.objetivo = e.habilidad && /^(Repetir «|Replay “)/.test(e.objetivo) ? "" : e.objetivo;
   if (e.superficie === "escritorio") { q.tipo = "app"; q.app = e.donde; } else if (e.donde) { q.tipo = "web"; q.url = e.donde; }
   q.permitir = [...(p.permitir || [])]; q.ver = !!p.ver; q.capturas = p.capturas !== false; q.sin_modelo = !!e.sin_modelo;
   if (p.parametros) q.parametros = {...q.parametros, ...p.parametros};
@@ -776,8 +956,8 @@ function vigilarEncargo() {
     const nuevas = q.cues.slice(E.cues.length);
     E = q;
     if (repintar) { pintar(); cargarEncargos(); return; }
-    $("#f-n").textContent = q.n; $("#f-pasos").textContent = q.n === 1 ? "paso" : "pasos";
-    $("#f-palos").innerHTML = palotes(q.n); $("#f-palos").setAttribute("aria-label", `${q.n} pasos`);
+    $("#f-n").textContent = q.n; $("#f-pasos").textContent = q.n === 1 ? t("paso") : t("pasos");
+    $("#f-palos").innerHTML = palotes(q.n); $("#f-palos").setAttribute("aria-label", t("n_pasos", {n: q.n}));
     $("#f-barra").style.width = Math.min(100, Math.round(q.n / (q.max_pasos || 30) * 100)) + "%";
     if (q.ultimo) {
       const u = $("#f-ultimo");
@@ -788,56 +968,140 @@ function vigilarEncargo() {
       $(".hoja-vacia", hoja)?.remove();
       hoja.insertAdjacentHTML("beforeend", nuevas.map(cueHTML).join(""));
       if (abajo) hoja.scrollTop = hoja.scrollHeight;
-      $("#f-cuenta").textContent = `${q.cues.length} renglones`;
+      $("#f-cuenta").textContent = t("renglones", {n: q.cues.length});
     }
   }, 1000);
 }
 
 /* ---------- oficios ---------- */
 function repertorio(v) {
-  v.innerHTML = `<h1>Oficios</h1>
-    <p class="dice">lo que ya sé hacer solo, sin pensarlo</p>
-    <p class="sub">Cada oficio es algo que salió bien una vez. Lo repito con los datos nuevos y solo miro el final; si algo ha cambiado en la web, sigo pensando desde ahí.</p>
+  v.innerHTML = `<h1>${t("oficios_h1")}</h1>
+    <p class="dice">${t("oficios_dice")}</p>
+    <p class="sub">${t("oficios_sub")}</p>
     ${REPERTORIO.length ? `<div class="pared">${REPERTORIO.map((o) => `<article class="obra">
-      <span class="cifra">${o.superficie === "escritorio" ? "en un programa" : "en una web"} · ${o.pasos.length} ${o.pasos.length === 1 ? "paso" : "pasos"}${o.aprendida ? " · aprendido el " + esc(o.aprendida) : ""}</span>
+      <span class="cifra">${o.superficie === "escritorio" ? t("en_programa") : t("en_web")} · ${o.pasos.length} ${o.pasos.length === 1 ? t("paso") : t("pasos")}${o.aprendida ? t("aprendido_el", {f: esc(o.aprendida)}) : ""}</span>
       <h2>${esc(o.nombre)}</h2><p>${conHuecos(o.descripcion)}</p>
-      ${Object.keys(o.parametros).length ? `<div class="reparto">${Object.entries(o.parametros).map(([k, ej]) => `<span title="Ejemplo: ${esc(ej)}">${esc(k)}</span>`).join("")}</div>` : ""}
-      <details><summary>los pasos</summary><ol class="lista-num">${o.pasos.map((p) => `<li><span>${conHuecos(p)}</span></li>`).join("")}</ol></details>
-      <div class="botones"><button class="btn principal" data-usar="${esc(o.nombre)}">hacerlo</button>
-        <button class="btn" data-sinpensar="${esc(o.nombre)}" title="Repetirlo tal cual, sin preguntar a ningún modelo">sin pensar</button>
-        <button class="btn discreto" data-olvidar="${esc(o.nombre)}">descoserlo</button></div></article>`).join("")}</div>`
-    : `<div class="hoja"><h2>Aún no sé ningún oficio</h2><ol class="lista-num cifra" style="font-size:15px;line-height:32px">
-        <li>Mándeme un recado y marque <b>«lo aprendo de oficio»</b>: si sale bien, lo coso aquí.</li>
-        <li>O enséñeme un proceso que grabó con tramoya, aquí abajo.</li></ol>
-        <div class="botones"><button class="btn principal" id="r-encargar">dar un recado</button></div></div>`}`;
+      ${Object.keys(o.parametros).length ? `<div class="reparto">${Object.entries(o.parametros).map(([k, ej]) => `<span title="${esc(t("ejemplo", {e: ej}))}">${esc(k)}</span>`).join("")}</div>` : ""}
+      <details><summary>${t("los_pasos")}</summary><ol class="lista-num">${o.pasos.map((p) => `<li><span>${conHuecos(p)}</span></li>`).join("")}</ol></details>
+      <div class="botones"><button class="btn principal" data-usar="${esc(o.nombre)}">${t("hacerlo")}</button>
+        <button class="btn" data-sinpensar="${esc(o.nombre)}" title="${esc(t("sin_pensar_title"))}">${t("sin_pensar")}</button>
+        <button class="btn" data-skill="${esc(o.nombre)}" title="${esc(t("como_skill_title"))}">${t("como_skill")}</button>
+        <button class="btn discreto" data-olvidar="${esc(o.nombre)}">${t("descoserlo")}</button></div></article>`).join("")}</div>`
+    : `<div class="hoja"><h2>${t("ninguno_aun")}</h2><ol class="lista-num cifra" style="font-size:15px;line-height:32px">
+        <li>${t("ninguno_1")}</li>
+        <li>${t("ninguno_2")}</li></ol>
+        <div class="botones"><button class="btn principal" id="r-encargar">${t("dar_recado")}</button></div></div>`}`;
   const usar = (nombre, sin) => { PEDIDO = pedidoNuevo(REPERTORIO.find((o) => o.nombre === nombre)); PEDIDO.sin_modelo = sin; VISTA = "encargar"; pintar(); };
   v.querySelectorAll("[data-usar]").forEach((b) => b.onclick = () => usar(b.dataset.usar, false));
   v.querySelectorAll("[data-sinpensar]").forEach((b) => b.onclick = () => usar(b.dataset.sinpensar, true));
-  v.querySelectorAll("[data-olvidar]").forEach((b) => b.onclick = () => confirmar(`¿Descoso «${b.dataset.olvidar}»?`, "Dejaré de saberlo de memoria; podré seguir haciéndolo pensando.", "descoserlo", async () => {
-    await api(`/api/repertorio/${b.dataset.olvidar}/olvidar`, {}); await cargarEncargos(); pintar(); avisar("Descosido.");
+  v.querySelectorAll("[data-skill]").forEach((b) => b.onclick = async () => {
+    const r = await api(`/api/repertorio/${b.dataset.skill}/skill`, {});
+    avisar(r.error ? r.error : t("skill_escrita", {r: r.ruta}));
+  });
+  v.querySelectorAll("[data-olvidar]").forEach((b) => b.onclick = () => confirmar(t("descoser_t", {o: b.dataset.olvidar}), t("descoser_p"), t("descoserlo"), async () => {
+    await api(`/api/repertorio/${b.dataset.olvidar}/olvidar`, {}); await cargarEncargos(); pintar(); avisar(t("descosido"));
   }));
   const r = $("#r-encargar"); if (r) r.onclick = () => { PEDIDO = null; VISTA = "encargar"; pintar(); };
-  v.insertAdjacentHTML("beforeend", `<div class="ensenar oscuro"><h2>Enseñarme uno nuevo</h2>
-    <p class="pista">Desde un recado que salió bien («que lo aprenda», en su libreta) o desde un vídeo de tramoya, que ya tiene los pasos: pegue la carpeta del proyecto (la que tiene <code>proyecto.json</code>) o su nombre.</p>
-    <div class="fila"><input type="text" id="r-origen" placeholder="carpeta o nombre del proyecto de tramoya" spellcheck="false" aria-label="Proyecto de tramoya">
-      <button class="btn" id="r-ensenar">coserlo aquí</button></div>
-    <div class="botones" style="margin-top:14px"><button class="btn discreto" id="r-carpeta">${ico("carpeta")} abrir la carpeta de los oficios</button></div></div>`);
+  v.insertAdjacentHTML("beforeend", `<div class="ensenar oscuro"><h2>${t("ensenar_h")}</h2>
+    <p class="pista">${t("ensenar_p")}</p>
+    <div class="fila"><input type="text" id="r-origen" placeholder="${esc(t("ph_origen"))}" spellcheck="false" aria-label="${esc(t("aria_origen"))}">
+      <button class="btn" id="r-ensenar">${t("coserlo_aqui")}</button></div>
+    <div class="opcion" style="border-top-color:rgba(219,198,165,.3)"><div><b>${t("exportar_b")}</b><small style="color:var(--cal-sucia)">${t("exportar_s")}</small></div>
+      <label class="interruptor"><input type="checkbox" id="r-skill" aria-label="${esc(t("exportar_b"))}"><span style="border-color:var(--estraza)"></span></label></div>
+    <div class="botones" style="margin-top:14px"><button class="btn discreto" id="r-carpeta">${ico("carpeta")} ${t("abrir_oficios")}</button></div></div>`);
   $("#r-carpeta").onclick = () => api("/api/abrir-repertorio", {});
   $("#r-ensenar").onclick = () => {
     const origen = $("#r-origen").value.trim(); if (!origen) return $("#r-origen").focus();
     const sugerido = nombreObra(base(origen.replace(/[\\/]proyecto\.json$/i, "")));
-    pedirTexto("Aprenderlo de oficio", "Un nombre corto para reconocerlo. Cuando me mande algo parecido, repetiré estos pasos con los datos nuevos.", sugerido, "coserlo", async (nombre) => {
-      const r = await api("/api/aprender", {origen, nombre});
+    const marcada = $("#r-skill").checked;
+    pedirNombre(t("aprender_t"), t("aprender_p"), sugerido, t("coserlo"), async (nombre, skill) => {
+      const r = await api("/api/aprender", {origen, nombre, exportar_skill: skill || marcada});
       if (r.error) { avisar(r.error); return false; }
-      await cargarEncargos(); pintar(); avisar(`Ya sé hacerlo solo: «${r.nombre}».`);
+      await cargarEncargos(); pintar(); aprendida(r);
     });
+    if (marcada) { const c = $("#d-skill"); if (c) c.checked = true; }
+  };
+}
+
+/* ---------- ajustes ---------- */
+function ajustes(v) {
+  const a = {...(INICIO.ajustes || {})};
+  if (!a.idioma) a.idioma = LANG;
+  a.ia_backend = a.ia_backend || "";
+  const seg = (clave, opciones) => `<div class="segmentos" data-clave="${clave}">${opciones.map(([val, txt]) =>
+    `<button type="button" data-v="${val}" class="${(a[clave] || "") === val ? "on" : ""}">${txt}</button>`).join("")}</div>`;
+  v.innerHTML = `<h1>${t("ajustes_h1")}</h1>
+    <p class="dice">${t("ajustes_dice")}</p>
+    <p class="sub">${t("ajustes_sub")}</p>
+    <form class="hoja" id="tarjeta-ajustes" onsubmit="return false">
+      <div class="campo"><span>${t("idioma")}</span>${seg("idioma", [["en", "English"], ["es", "Español"]])}<small>${t("idioma_sub")}</small></div>
+      <div class="campo" id="a-ia"><span>${t("ia")}</span>
+        ${seg("ia_backend", [["", t("ia_auto")], ["ollama", "Ollama"], ["claude", "Claude"], ["openai", t("ia_openai")]])}
+        <small>${t("ia_sub")}</small>
+        <p class="pista ia-solo" data-para="">${t("ia_auto_sub")}</p>
+        <p class="pista ia-solo" data-para="claude openai" style="color:var(--sangre)">${t("ia_remoto")}</p>
+        <label class="campo ia-solo" data-para="ollama openai" style="margin-top:12px"><span id="a-ia-url-t"></span>
+          <input type="text" id="a-ia-url" value="${esc(a.ia_url || "")}" spellcheck="false"></label>
+        <label class="campo ia-solo" data-para="ollama claude openai"><span>${t("ia_modelo")}</span>
+          <div class="fila"><input type="text" id="a-ia-modelo" list="a-ia-lista" value="${esc(a.ia_modelo || "")}" placeholder="${esc(t("ia_modelo_ph"))}" spellcheck="false" style="flex:1">
+          <button class="btn" id="a-ia-cargar" type="button">${t("ia_cargar")}</button></div>
+          <datalist id="a-ia-lista"></datalist><small id="a-ia-n"></small></label>
+        <label class="campo ia-solo" data-para="claude openai"><span>${t("ia_clave")}</span>
+          <input type="password" id="a-ia-clave" autocomplete="off" placeholder="${esc(t("ia_clave_ph"))}" spellcheck="false">
+          <small id="a-ia-clave-nota">${a.ia_clave_guardada ? t("ia_clave_guardada", {fin: esc(a.ia_clave_fin || "")}) + ` <a href="#" id="a-ia-borrar">${t("ia_clave_borrar")}</a>` : t("ia_clave_nota")}</small></label>
+        <div class="botones"><button class="btn" id="a-ia-probar" type="button">${ico("bombilla")} ${t("ia_probar")}</button>
+          <span class="pista" id="a-ia-resultado">${INICIO.ia ? esc(t("ia_ahora", {ia: INICIO.ia})) : ""}</span></div></div>
+      <div class="botones" style="margin-top:22px"><button type="button" class="btn principal grande" id="a-ok">${t("guardar")}</button></div>
+    </form>
+    <div class="ensenar oscuro"><h2>${t("skills_h")}</h2><p class="pista">${t("skills_p", {d: esc(INICIO.skills || "~/.claude/skills")})}</p></div>`;
+  v.querySelectorAll(".segmentos").forEach((g) => g.onclick = (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const antes = a[g.dataset.clave] || "";
+    a[g.dataset.clave] = b.dataset.v;
+    g.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    if (g.dataset.clave === "ia_backend" && antes !== b.dataset.v) {
+      // The model and the server belong to the backend they were written for.
+      $("#a-ia-modelo").value = ""; $("#a-ia-url").value = ""; $("#a-ia-lista").innerHTML = ""; $("#a-ia-n").textContent = ""; $("#a-ia-resultado").textContent = "";
+      iaVista();
+    }
+  });
+  const iaVista = () => {
+    const b = a.ia_backend || "";
+    v.querySelectorAll(".ia-solo").forEach((el) => { el.style.display = el.dataset.para.split(" ").includes(b) ? "" : "none"; });
+    $("#a-ia-url-t").textContent = b === "openai" ? t("ia_url_openai") : t("ia_url_ollama");
+    $("#a-ia-url").placeholder = b === "openai" ? "http://127.0.0.1:1234/v1" : "http://localhost:11434";
+  };
+  const borrador = () => ({ia_backend: a.ia_backend || "", ia_url: $("#a-ia-url").value.trim(), ia_modelo: $("#a-ia-modelo").value.trim(), ia_clave: $("#a-ia-clave").value.trim()});
+  $("#a-ia-cargar").onclick = async () => {
+    const n = $("#a-ia-n"); n.textContent = t("ia_probando");
+    const r = await api("/api/ia/modelos", borrador());
+    if (r.error || r.ok === false) { n.textContent = t("ia_mal", {e: r.error}); return; }
+    $("#a-ia-lista").innerHTML = (r.modelos || []).map((m) => `<option value="${esc(m)}">`).join("");
+    n.textContent = t("ia_modelos_n", {n: (r.modelos || []).length});
+    if (!$("#a-ia-modelo").value && r.modelo) $("#a-ia-modelo").placeholder = r.modelo;
+  };
+  $("#a-ia-probar").onclick = async () => {
+    const res = $("#a-ia-resultado"); res.textContent = t("ia_probando");
+    const r = await api("/api/ia/probar", borrador());
+    res.textContent = r.ok ? "✓ " + t("ia_ok", {m: `${r.backend} · ${r.modelo}`, s: (r.ms / 1000).toFixed(1)}) : "✗ " + t("ia_mal", {e: r.error});
+  };
+  const borrar = $("#a-ia-borrar");
+  if (borrar) borrar.onclick = (e) => { e.preventDefault(); a.ia_clave_borrar = true; $("#a-ia-clave-nota").textContent = t("ia_clave_nota"); };
+  iaVista();
+  $("#a-ok").onclick = async () => {
+    const cuerpo = {idioma: a.idioma, ...borrador()};
+    if (a.ia_clave_borrar) cuerpo.ia_clave_borrar = true;
+    const r = await api("/api/ajustes", cuerpo);
+    if (r.error) { avisar(r.error); return; }
+    await cargarInicio(); pintar(); avisar(t("ajustes_ok"));
   };
 }
 
 $("#btn-encargar").onclick = () => { E = null; PEDIDO = null; VISTA = "encargar"; pintar(); pintarEncargos(); };
 $("#btn-repertorio").onclick = async () => { E = null; await cargarEncargos(); VISTA = "repertorio"; pintar(); pintarEncargos(); };
+$("#btn-ajustes").onclick = () => { E = null; VISTA = "ajustes"; pintar(); pintarEncargos(); };
 document.addEventListener("click", () => { const m = $(".menu-lista"); if (m) m.remove(); });
-setInterval(() => { if (VISTA !== "encargo") cargarEncargos(); }, 5000);
+setInterval(() => { if (VISTA !== "encargo" && VISTA !== "ajustes") cargarEncargos(); }, 5000);
 
 (async () => {
   await cargarInicio();

@@ -13,6 +13,8 @@ namespace Faena.Tests;
 /// </summary>
 public sealed class DesktopTests(ITestOutputHelper salida)
 {
+    private readonly Idioma _idioma = new("es");
+
     // ------------------------------------------------------------------ selector
 
     [Theory]
@@ -78,8 +80,8 @@ public sealed class DesktopTests(ITestOutputHelper salida)
     public void ElPromptDeTareaEnEscritorioNoTieneUrls()
     {
         var p = Protocol.SystemPromptTarea("Añade una nota", "escritorio");
-        Assert.Contains("aplicación de escritorio", p);
-        Assert.DoesNotContain("\"ir\"", p);
+        Assert.Contains("Windows desktop application", p);
+        Assert.DoesNotContain("\"goto\"", p);
     }
 
     // ------------------------------------------------------------------ de verdad, en un escritorio oculto

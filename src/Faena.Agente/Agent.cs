@@ -12,10 +12,10 @@ public sealed record Irreversible(string Categoria, string Descripcion, string M
 
 /// <summary>Lo que se le pide al agente.</summary>
 /// <param name="Goal">El objetivo en lenguaje natural («Busca "Madrid" y abre el artículo»).</param>
-/// <param name="Lang">El idioma del registro y del informe (por ahora solo español).</param>
+/// <param name="Lang">The language of the log, the report and the model's summary («en» or «es»); null: <see cref="Lengua.Actual"/>.</param>
 /// <param name="MaxPasos">Tope de pasos apuntados; las esperas y las acciones fallidas no cuentan.</param>
 /// <param name="Capturas">Mandar también una captura de pantalla en cada turno (solo la aprovechan los modelos con visión).</param>
-public sealed record AgentOptions(string Goal, string Lang = "es", int MaxPasos = 25, bool Capturas = false)
+public sealed record AgentOptions(string Goal, string? Lang = null, int MaxPasos = 25, bool Capturas = false)
 {
     /// <summary>Tope de tiempo de la ejecución entera; sin valor, solo el de pasos.</summary>
     public TimeSpan? MaxTiempo { get; init; }
@@ -93,7 +93,7 @@ public static class Agent
         catch (Exception) { resultado.Titulo = ""; }
         // Las obras que encajan con el objetivo se le ofrecen como acciones (como las habilidades de ASI).
         var obras = Habilidades.Candidatas(options.Goal, options.Repertorio, sup.Tipo, sup.Donde, max: 5);
-        var system = Protocol.SystemPromptTarea(options.Goal, sup.Tipo, options.Receta, Habilidades.Menu(obras));
+        var system = Protocol.SystemPromptTarea(options.Goal, sup.Tipo, options.Receta, Habilidades.Menu(obras), options.Lang);
         // Lo que se veía antes de la última acción y el paso que la apuntó: con la observación
         // siguiente se le cuenta al modelo qué cambió, y el paso sabe si hizo algo.
         Observation? previa = null;
@@ -102,16 +102,17 @@ public static class Agent
         var hechos = options.Previos.Select(p => Observer.Str(p, "desc")).ToList();
         resultado.Pasos.AddRange(options.Previos.Select(p => (JsonObject)p.DeepClone()));
         var ultimo = hechos.Count != 0
-            ? "se han repetido los pasos de la habilidad aprendida con los valores del objetivo; comprueba en la pantalla si el objetivo ya está conseguido (no la repitas con los mismos valores)."
-            : "acabamos de abrir la página.";
+            ? "the steps of the learned skill have been replayed with the values of the goal; check on the screen whether the goal is already achieved (do not replay it with the same values)."
+            : "the page has just been opened.";
         var turnos = 0;
         var fallosSeguidos = 0;
         var miradasFallidas = 0;
         // Un modelo que no acierta nunca podría dar vueltas sin apuntar pasos: hay un tope de turnos también.
         var maxTurnos = options.MaxPasos * 2 + 4;
         string Cancelado() => externo.IsCancellationRequested || options.MaxTiempo is null
-            ? "Se ha cancelado antes de terminar."
-            : $"Se ha llegado al tope de tiempo ({options.MaxTiempo.Value.TotalMinutes:0.#} min) sin terminar.";
+            ? Lengua.T("Se ha cancelado antes de terminar.", "Cancelled before finishing.")
+            : Lengua.T($"Se ha llegado al tope de tiempo ({options.MaxTiempo.Value.TotalMinutes:0.#} min) sin terminar.",
+                       $"Reached the time limit ({options.MaxTiempo.Value.TotalMinutes:0.#} min) without finishing.");
 
         while (true)
         {
@@ -122,12 +123,12 @@ public static class Agent
             }
             if (resultado.Pasos.Count >= options.MaxPasos)
             {
-                resultado.Avisos.Add($"Se ha llegado al tope de {options.MaxPasos} pasos sin terminar.");
+                resultado.Avisos.Add(Lengua.T($"Se ha llegado al tope de {options.MaxPasos} pasos sin terminar.", $"Reached the limit of {options.MaxPasos} steps without finishing."));
                 break;
             }
             if (++turnos > maxTurnos)
             {
-                resultado.Avisos.Add("El modelo no ha conseguido avanzar; se deja aquí.");
+                resultado.Avisos.Add(Lengua.T("El modelo no ha conseguido avanzar; se deja aquí.", "The model could not make progress; leaving it here."));
                 break;
             }
 
@@ -141,11 +142,11 @@ public static class Agent
             catch (Exception e)
             {
                 // La página está navegando o se ha cerrado: se espera un poco y se vuelve a mirar (sin gastar turno).
-                log?.Report($"No he podido mirar la página ({Breve(e)}); espero.");
+                log?.Report(Lengua.T($"No he podido mirar la página ({Breve(e)}); espero.", $"Could not look at the page ({Breve(e)}); waiting."));
                 turnos--;
                 if (++miradasFallidas > 5)
                 {
-                    resultado.Avisos.Add($"No se puede mirar la página: {Breve(e)}");
+                    resultado.Avisos.Add(Lengua.T($"No se puede mirar la página: {Breve(e)}", $"Cannot look at the page: {Breve(e)}"));
                     resultado.Resumen = resultado.Avisos[^1];
                     break;
                 }
@@ -177,11 +178,11 @@ public static class Agent
                 catch (ArgumentException e)
                 {
                     // Un JSON torcido no es un fallo: se le enseña el error y se le pide otra vez, una sola.
-                    log?.Report($"La respuesta del modelo no vale ({e.Message}); se lo pido otra vez.");
+                    log?.Report(Lengua.T($"La respuesta del modelo no vale ({e.Message}); se lo pido otra vez.", $"The model's answer is not valid ({e.Message}); asking again."));
                     var reintento = new List<ChatMessage>(mensajes)
                     {
                         new("assistant", respuesta),
-                        new("user", $"Tu respuesta no vale: {e.Message}. Responde SOLO con el objeto JSON de la siguiente acción."),
+                        new("user", $"Your answer is not valid: {e.Message}. Answer ONLY with the JSON object of the next action."),
                     };
                     respuesta = await backend.CompleteAsync(system, reintento, ct).ConfigureAwait(false);
                     decision = Protocol.ParseDecision(respuesta);
@@ -194,36 +195,40 @@ public static class Agent
             }
             catch (Exception e)
             {
-                resultado.Avisos.Add($"El modelo no ha contestado bien: {Breve(e)}");
+                resultado.Avisos.Add(Lengua.T($"El modelo no ha contestado bien: {Breve(e)}", $"The model did not answer properly: {Breve(e)}"));
                 resultado.Resumen = resultado.Avisos[^1];
                 log?.Report(resultado.Resumen);
                 break;
             }
             resultado.Turnos++;
-            var resumenTurno = $"{decision.Accion}{(decision.Ref is int r && Protocol.ConRef.Contains(decision.Accion) ? $" {r}" : "")}{(decision.Valor.Length != 0 ? $" «{decision.Valor}»" : "")}";
-            historial.Add((usuario, $"Página: {obs.Title} ({obs.Url})\nResultado de la última acción: {ultimo}", respuesta));
+            var resumenTurno = $"{Protocol.AccionEn[decision.Accion]}{(decision.Ref is int r && Protocol.ConRef.Contains(decision.Accion) ? $" {r}" : "")}{(decision.Valor.Length != 0 ? $" “{decision.Valor}”" : "")}";
+            // In the log, in the person's words (the Spanish action names are faena's own: clic, escribir…).
+            var resumenLog = Lengua.Es
+                ? $"{decision.Accion}{(decision.Ref is int r2 && Protocol.ConRef.Contains(decision.Accion) ? $" {r2}" : "")}{(decision.Valor.Length != 0 ? $" «{decision.Valor}»" : "")}"
+                : resumenTurno;
+            historial.Add((usuario, $"Page: {obs.Title} ({obs.Url})\nResult of the last action: {ultimo}", respuesta));
             if (historial.Count > Historial) historial.RemoveAt(0);
-            log?.Report($"Turno {turnos}: {resumenTurno} — {decision.Pensamiento}");
+            log?.Report(Lengua.T($"Turno {turnos}: {resumenLog} — {decision.Pensamiento}", $"Turn {turnos}: {resumenLog} — {decision.Pensamiento}"));
 
             if (decision.Accion == "terminar")
             {
                 resultado.Ok = true;
                 resultado.Resumen = decision.Resumen.Length != 0 ? decision.Resumen : decision.Pensamiento;
-                log?.Report($"Terminado: {resultado.Resumen}");
+                log?.Report(Lengua.T($"Terminado: {resultado.Resumen}", $"Done: {resultado.Resumen}"));
                 break;
             }
             if (decision.Accion == "fallo")
             {
                 resultado.Resumen = decision.Resumen.Length != 0 ? decision.Resumen : decision.Pensamiento;
-                resultado.Avisos.Add($"El agente se ha rendido: {resultado.Resumen}");
-                log?.Report($"No he podido: {resultado.Resumen}");
+                resultado.Avisos.Add(Lengua.T($"El agente se ha rendido: {resultado.Resumen}", $"The agent gave up: {resultado.Resumen}"));
+                log?.Report(Lengua.T($"No he podido: {resultado.Resumen}", $"Could not do it: {resultado.Resumen}"));
                 break;
             }
             if (decision.Accion == "esperar")
             {
                 try { await Task.Delay(1000, ct).ConfigureAwait(false); } catch (OperationCanceledException) { continue; }
                 await sup.AsentarAsync().ConfigureAwait(false);
-                ultimo = "he esperado un segundo.";
+                ultimo = "waited one second.";
                 previa = obs;
                 continue;
             }
@@ -232,7 +237,7 @@ public static class Agent
                 var obra = options.Repertorio.FirstOrDefault(h => string.Equals(h.Nombre, decision.Valor.Trim(), StringComparison.OrdinalIgnoreCase));
                 if (obra is null)
                 {
-                    ultimo = $"no hay ninguna obra «{decision.Valor}» en el repertorio; usa las de la lista o hazlo paso a paso.";
+                    ultimo = $"there is no procedure “{decision.Valor}” in the repertoire; use those in the list or do it step by step.";
                     continue;
                 }
                 var valores = new Dictionary<string, string>(obra.Parametros, StringComparer.Ordinal);
@@ -249,8 +254,8 @@ public static class Agent
                     break;
                 }
                 ultimo = uso.Fallo.Length == 0
-                    ? $"repetida la obra «{obra.Nombre}» entera ({uso.Repetidos} pasos)."
-                    : $"la obra «{obra.Nombre}» se ha quedado a medias: {uso.Fallo}. Sigue tú desde aquí.";
+                    ? $"replayed the whole procedure “{obra.Nombre}” ({uso.Repetidos} steps)."
+                    : $"the procedure “{obra.Nombre}” stopped halfway: {uso.Fallo}. Go on from here yourself.";
                 previa = obs;
                 fallosSeguidos = 0;
                 continue;
@@ -258,7 +263,7 @@ public static class Agent
 
             if (Guardian.Detectar(obs, decision) is { } peligro && !Guardian.Permitida(peligro, options.Permitidas))
             {
-                log?.Report($"Acción irreversible: {peligro.Descripcion} ({peligro.Categoria}).");
+                log?.Report(Lengua.T($"Acción irreversible: {peligro.Descripcion} ({peligro.Categoria}).", $"Irreversible action: {peligro.Descripcion} ({Guardian.NombreCategoria(peligro.Categoria)})."));
                 var si = false;
                 if (options.Confirmar is { } confirmar)
                 {
@@ -268,12 +273,13 @@ public static class Agent
                 if (!si)
                 {
                     resultado.Pendiente = peligro;
-                    resultado.Resumen = $"Me he parado antes de {Minuscula(peligro.Descripcion)}: {Porque(peligro)} y no está autorizado.";
+                    resultado.Resumen = Lengua.T($"Me he parado antes de {Minuscula(peligro.Descripcion)}: {Porque(peligro)} y no está autorizado.",
+                        $"Stopped before: {peligro.Descripcion} ({Porque(peligro)}; not allowed).");
                     resultado.Avisos.Add(resultado.Resumen);
                     log?.Report(resultado.Resumen);
                     break;
                 }
-                log?.Report("Autorizado: sigo.");
+                log?.Report(Lengua.T("Autorizado: sigo.", "Allowed: going on."));
             }
 
             JsonObject? paso;
@@ -288,11 +294,11 @@ public static class Agent
             }
             catch (Exception e)
             {
-                ultimo = $"la acción «{resumenTurno}» ha fallado: {Explicar(e)}";
-                log?.Report($"Falló: {ultimo}");
+                ultimo = $"the action “{resumenTurno}” failed: {Explicar(e)}";
+                log?.Report(Lengua.T($"Falló: la acción «{resumenLog}» ha fallado: {Explicar(e, "es")}", $"Failed: {ultimo}"));
                 if (++fallosSeguidos >= 4)
                 {
-                    resultado.Avisos.Add("Cuatro acciones seguidas han fallado; se deja aquí.");
+                    resultado.Avisos.Add(Lengua.T("Cuatro acciones seguidas han fallado; se deja aquí.", "Four actions in a row failed; leaving it here."));
                     resultado.Resumen = resultado.Avisos[^1];
                     break;
                 }
@@ -301,8 +307,8 @@ public static class Agent
             fallosSeguidos = 0;
             if (paso is null)
             {
-                ultimo = $"no existe el elemento {decision.Ref}; usa solo los números de la lista actual.";
-                log?.Report($"El modelo ha pedido un elemento que no existe ({decision.Ref}).");
+                ultimo = $"there is no element {decision.Ref}; use only the numbers of the current list.";
+                log?.Report(Lengua.T($"El modelo ha pedido un elemento que no existe ({decision.Ref}).", $"The model asked for an element that does not exist ({decision.Ref})."));
                 continue;
             }
             await sup.AsentarAsync().ConfigureAwait(false);
@@ -311,8 +317,8 @@ public static class Agent
             pasoPrevio = paso;
             var desc = paso["desc"]?.ToString() ?? "";
             hechos.Add(desc);
-            ultimo = $"hecho: {desc}.";
-            log?.Report($"Paso {resultado.Pasos.Count}: {desc} — porque {decision.Pensamiento}");
+            ultimo = $"done: {desc}.";
+            log?.Report(Lengua.T($"Paso {resultado.Pasos.Count}: {desc} — porque {decision.Pensamiento}", $"Step {resultado.Pasos.Count}: {desc} — because {decision.Pensamiento}"));
             await CapturarAsync(sup, options, resultado, $"{resultado.Pasos.Count:00}").ConfigureAwait(false);
         }
         await CapturarAsync(sup, options, resultado, "final").ConfigureAwait(false);
@@ -334,9 +340,10 @@ public static class Agent
         catch (IOException) { /* sin captura no se para la tarea */ }
     }
 
-    /// <summary>Por qué se considera irreversible, dicho para una persona.</summary>
-    internal static string Porque(Irreversible p) =>
-        p.Categoria == "irreversible" ? "el modelo dice que no tiene vuelta atrás" : $"es irreversible ({p.Categoria})";
+    /// <summary>Why it counts as irreversible, said for a person.</summary>
+    internal static string Porque(Irreversible p) => p.Categoria == "irreversible"
+        ? Lengua.T("el modelo dice que no tiene vuelta atrás", "the model says it cannot be undone")
+        : Lengua.T($"es irreversible ({p.Categoria})", $"it is irreversible: {Guardian.NombreCategoria(p.Categoria)}");
 
     private static string Minuscula(string s) => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..];
 
@@ -354,16 +361,16 @@ public static class Agent
         return lista;
     }
 
-    /// <summary>Lo que ha fallado, dicho para el modelo (y para el registro) sin la pila de Playwright.</summary>
-    private static string Explicar(Exception e)
+    /// <summary>What failed, said for the model (English) or the log, without Playwright's stack.</summary>
+    private static string Explicar(Exception e, string lang = "en")
     {
         var t = e.Message ?? "";
         if (t.Contains("Timeout", StringComparison.OrdinalIgnoreCase) || t.Contains("not visible", StringComparison.Ordinal))
-            return "el elemento no se ha podido pulsar (no visible, tapado o ha tardado demasiado)";
+            return Lengua.T("el elemento no se ha podido pulsar (no visible, tapado o ha tardado demasiado)", "the element could not be clicked (not visible, covered or too slow)", lang);
         if (t.Contains("strict mode", StringComparison.Ordinal))
-            return "hay varios elementos iguales";
+            return Lengua.T("hay varios elementos iguales", "there are several identical elements", lang);
         if (t.Contains("intercepts pointer events", StringComparison.Ordinal))
-            return "otro elemento lo tapa (un aviso o un menú abierto)";
+            return Lengua.T("otro elemento lo tapa (un aviso o un menú abierto)", "another element covers it (a notice or an open menu)", lang);
         return Breve(e);
     }
 

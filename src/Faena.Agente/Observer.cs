@@ -279,5 +279,5 @@ public static class Observer
         return 0;
     }
 
-    internal static string Recortar(string s, int n) => s.Length <= n ? s : s[..n];
+    public static string Recortar(string s, int n) => s.Length <= n ? s : s[..n];
 }
