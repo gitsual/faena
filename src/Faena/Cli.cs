@@ -1,4 +1,4 @@
-// The `faena` command line: `do` and `skills` (Hacer.cs), `window`
+// The `faena` command line: `do` and `skills` (Hacer.cs), `skill` (AgentSkills.cs), `window`
 // (the window's server, with or without the window) and the hidden `browser install`, the
 // first-run download of Chromium by hand. English by default, Spanish with --lang es (or
 // FAENA_LANG, or the window's Settings): the commands and options have a name in each language
@@ -60,6 +60,7 @@ internal static class Cli
             "el idioma de la salida, los informes y lo que escribe el modelo (por defecto, FAENA_LANG, el de los ajustes o en)",
             "the language of the output, the reports and what the model writes (default: FAENA_LANG, the one in Settings, or en)"));
         Hacer.Registrar(ap);
+        AgentSkills.Registrar(ap);
 
         var (nombre, alias) = Comando("window", "ventana");
         var p = ap.AddSubparser("command", nombre, help: Lengua.T("abre la ventana (lo mismo que sin argumentos)", "open the window (the same as no arguments)"), aliases: alias);

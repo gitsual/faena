@@ -32,6 +32,9 @@ public sealed class Opciones
 
     /// <summary>The Settings file (language and AI); <see cref="Paths.Ajustes"/> unless a test says otherwise.</summary>
     public string ArchivoAjustes { get; init; } = Paths.Ajustes;
+
+    /// <summary>Where «Export as skill» writes; null: the user's ~/.claude/skills.</summary>
+    public string? CarpetaSkills { get; init; }
 }
 
 /// <summary>
@@ -45,6 +48,17 @@ public sealed class Servidor : IDisposable
     private static readonly Regex RutaCaptura = new(@"^/api/encargos/([a-z0-9-]+)/captura/([a-z0-9]+\.png)$", RegexOptions.CultureInvariant);
     private static readonly Regex RutaAccionEncargo = new("^/api/encargos/([a-z0-9-]+)/([a-z]+)$", RegexOptions.CultureInvariant);
     private static readonly Regex RutaObra = new("^/api/repertorio/([a-z0-9-]+)/olvidar$", RegexOptions.CultureInvariant);
+    private static readonly Regex RutaSkill = new("^/api/repertorio/([a-z0-9-]+)/skill$", RegexOptions.CultureInvariant);
+
+    /// <summary>The answer to a learn: the trade's name and, if asked for, where its Agent Skill went (or why it did not).</summary>
+    private JsonObject Aprendida(string nombre, bool exportar)
+    {
+        var r = new JsonObject { ["ok"] = true, ["nombre"] = nombre };
+        if (!exportar) return r;
+        try { r["skill"] = Encargos.ExportarSkill(_o, nombre); }
+        catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException) { r["skill_error"] = e.Message; }
+        return r;
+    }
 
     private readonly Opciones _o;
     private readonly HttpListener _listener;
@@ -287,6 +301,7 @@ public sealed class Servidor : IDisposable
                 ["ajustes"] = Ajustes.Publicos(ajustes),
                 ["tareas"] = _o.CarpetaTareas,
                 ["habilidades"] = _o.CarpetaHabilidades,
+                ["skills"] = _o.CarpetaSkills ?? AgentSkills.Destino("user", null),
             });
             return;
         }
@@ -393,7 +408,7 @@ public sealed class Servidor : IDisposable
         if (ruta == "/api/aprender")
         {
             // Un proceso grabado en tramoya pasa al repertorio, por su carpeta o su id.
-            try { Responder(ctx, new JsonObject { ["ok"] = true, ["nombre"] = Encargos.AprenderDeProyecto(_o, Campos.Str(cuerpo, "origen"), Campos.Str(cuerpo, "nombre")) }); }
+            try { Responder(ctx, Aprendida(Encargos.AprenderDeProyecto(_o, Campos.Str(cuerpo, "origen"), Campos.Str(cuerpo, "nombre")), Campos.Bool(cuerpo, "exportar_skill"))); }
             catch (ArgumentException e) { Responder(ctx, new JsonObject { ["error"] = e.Message }, 400); }
             return;
         }
@@ -406,6 +421,12 @@ public sealed class Servidor : IDisposable
         if (RutaObra.Match(ruta) is { Success: true } o)
         {
             Responder(ctx, new JsonObject { ["ok"] = Encargos.Olvidar(_o, o.Groups[1].Value) });
+            return;
+        }
+        if (RutaSkill.Match(ruta) is { Success: true } sk)
+        {
+            try { Responder(ctx, new JsonObject { ["ok"] = true, ["ruta"] = Encargos.ExportarSkill(_o, sk.Groups[1].Value) }); }
+            catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException) { Responder(ctx, new JsonObject { ["error"] = e.Message }, 400); }
             return;
         }
         if (RutaAccionEncargo.Match(ruta) is not { Success: true } m)
@@ -434,7 +455,7 @@ public sealed class Servidor : IDisposable
                 if (_o.Windows) AbrirArchivo(carpeta);
                 break;
             case "aprender":
-                try { Responder(ctx, new JsonObject { ["ok"] = true, ["nombre"] = Encargos.AprenderDeEncargo(_o, id, Campos.Str(cuerpo, "nombre")) }); }
+                try { Responder(ctx, Aprendida(Encargos.AprenderDeEncargo(_o, id, Campos.Str(cuerpo, "nombre")), Campos.Bool(cuerpo, "exportar_skill"))); }
                 catch (ArgumentException e) { Responder(ctx, new JsonObject { ["error"] = e.Message }, 400); }
                 return;
             default:

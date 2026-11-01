@@ -62,6 +62,8 @@ internal static class Hacer
         p.AddAppend("--param", help: T("con --sin-modelo: nombre=valor de un parámetro de la habilidad; repetible",
                                        "with --no-model: name=value of a parameter of the skill; repeatable"));
         p.Add("--learn", help: T("si sale bien, guardar lo hecho como habilidad con este nombre", "if it goes well, save what was done as a skill with this name"), es: "--aprender");
+        p.AddSwitch("--skill", help: T("con --aprender: exportar también la habilidad como skill para agentes (faena-<nombre>/SKILL.md, como `faena skill export`)",
+                                       "with --learn: also export the skill as an Agent Skill (faena-<name>/SKILL.md, like `faena skill export`)"));
         p.Add("--folder", help: T("dónde dejar el log y el informe (por defecto, una carpeta nueva en tareas)", "where to leave the log and the report (default: a new folder in tareas)"), es: "--carpeta");
         p.Add("--backend", choices: new[] { "ollama", "claude", "openai" }, help: T("el modelo que piensa (por defecto, el de los ajustes o Ollama en este equipo)",
                                                                                     "the model that thinks (default: the one in Settings, or Ollama on this computer)"));
@@ -143,6 +145,7 @@ internal static class Hacer
         }
         if (sinModelo && elegida is null) { Console.Error.WriteLine(T("--sin-modelo necesita --habilidad: sin modelo no hay quien elija ni razone.", "--no-model needs --use-skill: without a model nobody chooses or reasons.")); return 2; }
         if (valores.Count != 0 && !sinModelo) { Console.Error.WriteLine(T("--param solo vale con --sin-modelo (si no, los valores salen del objetivo).", "--param only works with --no-model (otherwise the values come from the goal).")); return 2; }
+        if (args.Flag("skill") && args.Get("aprender") is null) { Console.Error.WriteLine(T("--skill va con --aprender <nombre>: exporta la habilidad aprendida.", "--skill goes with --learn <name>: it exports the learned skill.")); return 2; }
         if (elegida is not null && valores.Keys.FirstOrDefault(k => !elegida.Parametros.ContainsKey(k)) is { } raro)
         {
             Console.Error.WriteLine(T($"La habilidad «{elegida.Nombre}» no tiene el parámetro «{raro}» (tiene: {string.Join(", ", elegida.Parametros.Keys)}).",
@@ -245,6 +248,14 @@ internal static class Hacer
                 var h = Agente.Habilidades.Aprender(r.Agente.Pasos, nombre, goal, r.Agente.Inicio.Length != 0 ? r.Agente.Inicio : donde, superficie,
                     origen: $"tarea {Path.GetFileName(carpeta)}");
                 Console.WriteLine($"{T("habilidad", "skill")}: {Agente.Habilidades.Guardar(h, Paths.Habilidades)}");
+                if (args.Flag("skill"))
+                {
+                    try { Console.WriteLine($"{T("skill para agentes", "agent skill")}: {AgentSkills.Exportar(h, AgentSkills.Destino("user", null), Lengua.Actual, force: true)}"); }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+                    {
+                        Console.Error.WriteLine(T($"No se ha exportado la skill: {e.Message}", $"The agent skill was not exported: {e.Message}"));
+                    }
+                }
             }
             catch (ArgumentException e) { Console.Error.WriteLine(T($"No se ha guardado la habilidad: {e.Message}", $"The skill was not saved: {e.Message}")); }
         }

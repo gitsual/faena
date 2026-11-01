@@ -98,7 +98,11 @@ public static class Encargos
                 argv.AddRange(["--permitir", p]);
         if (Campos.Bool(pedido, "ver")) argv.Add("--ver");
         if (Campos.Bool(pedido, "capturas")) argv.Add("--capturas");
-        if (Campos.Str(pedido, "aprender").Trim() is { Length: > 0 } aprender) argv.AddRange(["--aprender", aprender]);
+        if (Campos.Str(pedido, "aprender").Trim() is { Length: > 0 } aprender)
+        {
+            argv.AddRange(["--aprender", aprender]);
+            if (Campos.Bool(pedido, "exportar_skill")) argv.Add("--skill");
+        }
         argv.AddRange(["--max-pasos", maxPasos.ToString(CultureInfo.InvariantCulture),
                        "--max-minutos", maxMinutos.ToString(CultureInfo.InvariantCulture),
                        "--carpeta", carpeta, "--fondo", "--preguntar-en-carpeta", "--lang", Lengua.Actual]);
@@ -399,6 +403,18 @@ public static class Encargos
         var h = Habilidades.Aprender(pasos, nombre, Campos.Str(p, "nombre"), inicio, "web",
             Lengua.T($"proyecto de tramoya {Path.GetFileName(Path.GetDirectoryName(archivo))}", $"tramoya project {Path.GetFileName(Path.GetDirectoryName(archivo))}"));
         return GuardarHabilidad(o, h);
+    }
+
+    /// <summary>
+    /// A trade as an Agent Skill, faena-&lt;name&gt;/SKILL.md, in the user's skills folder (or the
+    /// options' one, for the tests): the window's «Export as skill». It replaces an earlier export,
+    /// keeping a .bak, since the trade is the source.
+    /// </summary>
+    public static string ExportarSkill(Opciones o, string nombre)
+    {
+        var h = Habilidades.Cargar(o.CarpetaHabilidades).FirstOrDefault(x => string.Equals(x.Nombre, nombre, StringComparison.OrdinalIgnoreCase))
+                ?? throw new ArgumentException(Lengua.T($"No sé ningún oficio «{nombre}».", $"I know no trade called “{nombre}”."));
+        return AgentSkills.Exportar(h, o.CarpetaSkills ?? AgentSkills.Destino("user", null), Lengua.Actual, force: true);
     }
 
     public static bool Olvidar(Opciones o, string nombre)
