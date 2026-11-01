@@ -342,7 +342,7 @@ internal static class AgentSkills
         sb.Append("---\n\n");
         sb.Append(Cabecera(lang)).Append("\n\n");
         sb.Append($"# faena: {h.Nombre}\n\n");
-        sb.Append(T($"Una habilidad que faena aprendió (`{h.Nombre}`): ", $"A skill faena learned (`{h.Nombre}`): ", lang)).Append(h.Descripcion).Append('\n');
+        sb.Append(T($"Una habilidad que faena aprendió (`{h.Nombre}`): ", $"A skill faena learned (`{h.Nombre}`): ", lang)).Append(h.Descripcion.TrimEnd().TrimEnd('.')).Append(".\n");
         if (h.Inicio.Length != 0) sb.Append(T($"Empieza en {donde}: `{h.Inicio}`.\n", $"It starts in {donde}: `{h.Inicio}`.\n", lang));
         if (h.Origen.Length != 0 || h.Aprendida.Length != 0)
             sb.Append(T("Aprendida", "Learned", lang)).Append(h.Aprendida.Length != 0 ? $" {h.Aprendida}" : "").Append(h.Origen.Length != 0 ? $" ({h.Origen})" : "").Append(".\n");
